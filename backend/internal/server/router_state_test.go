@@ -3,9 +3,12 @@ package server
 import (
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"ota-server/backend/internal/config"
 )
 
@@ -44,5 +47,45 @@ func TestValidateOIDCState_Expired(t *testing.T) {
 
 	if err := validateOIDCState(cfg, state); err == nil {
 		t.Fatalf("validateOIDCState() expected error for expired state")
+	}
+}
+
+func TestRequireDeviceAPIAuth_Disabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/device/v1/check-update", nil)
+
+	cfg := &config.Config{Auth: config.AuthConfig{DeviceAPIAuthEnabled: false}}
+	if ok := requireDeviceAPIAuth(c, cfg); !ok {
+		t.Fatalf("requireDeviceAPIAuth() = false, want true when auth disabled")
+	}
+}
+
+func TestRequireDeviceAPIAuth_MissingBearer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/device/v1/check-update", nil)
+
+	cfg := &config.Config{Auth: config.AuthConfig{DeviceAPIAuthEnabled: true, DeviceAPIToken: "shared-token"}}
+	if ok := requireDeviceAPIAuth(c, cfg); ok {
+		t.Fatalf("requireDeviceAPIAuth() = true, want false when bearer is missing")
+	}
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestRequireDeviceAPIAuth_ValidBearer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/device/v1/check-update", nil)
+	c.Request.Header.Set("Authorization", "Bearer shared-token")
+
+	cfg := &config.Config{Auth: config.AuthConfig{DeviceAPIAuthEnabled: true, DeviceAPIToken: "shared-token"}}
+	if ok := requireDeviceAPIAuth(c, cfg); !ok {
+		t.Fatalf("requireDeviceAPIAuth() = false, want true for valid bearer token")
 	}
 }

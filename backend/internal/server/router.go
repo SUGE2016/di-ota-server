@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -513,6 +514,95 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": pkg})
 		})
 
+		api.GET("/devices", func(c *gin.Context) {
+			if !hasBearer(c.GetHeader("Authorization")) {
+				c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
+				return
+			}
+
+			limit := 20
+			offset := 0
+			if l := c.Query("limit"); l != "" {
+				if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 200 {
+					limit = n
+				}
+			}
+			if o := c.Query("offset"); o != "" {
+				if n, err := strconv.Atoi(o); err == nil && n >= 0 {
+					offset = n
+				}
+			}
+
+			devices, err := q.ListDevices(c.Request.Context(), store.ListDevicesParams{Limit: int32(limit), Offset: int32(offset)})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query devices failed"})
+				return
+			}
+			count, _ := q.CountDevices(c.Request.Context())
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"devices": devices, "total": count}})
+		})
+
+		api.GET("/devices/csv-template", func(c *gin.Context) {
+			if !hasBearer(c.GetHeader("Authorization")) {
+				c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
+				return
+			}
+			c.Header("Content-Type", "text/csv; charset=utf-8")
+			c.Header("Content-Disposition", `attachment; filename="ota-device-template.csv"`)
+			c.String(http.StatusOK, deviceCSVTemplate)
+		})
+
+		api.POST("/devices/import-csv", func(c *gin.Context) {
+			if !hasBearer(c.GetHeader("Authorization")) {
+				c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
+				return
+			}
+
+			fileHeader, err := c.FormFile("file")
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "csv file is required"})
+				return
+			}
+			if fileHeader.Size > 5*1024*1024 {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "csv file is too large"})
+				return
+			}
+
+			file, err := fileHeader.Open()
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "open csv file failed"})
+				return
+			}
+			defer file.Close()
+
+			rows, rowErrors, err := parseDeviceCSV(file)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": err.Error()})
+				return
+			}
+			if len(rowErrors) > 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "csv validation failed", "data": gin.H{"total_rows": len(rows) + len(rowErrors), "imported_count": 0, "failed_count": len(rowErrors), "errors": rowErrors}})
+				return
+			}
+
+			for _, row := range rows {
+				if _, err := q.UpsertDeviceCatalog(c.Request.Context(), store.UpsertDeviceCatalogParams{
+					DeviceID:        row.DeviceID,
+					DeviceGroup:     row.DeviceGroup,
+					ProductModel:    row.ProductModel,
+					HardwareVersion: row.HardwareVersion,
+					CurrentVersion:  row.CurrentVersion,
+					ProductCode:     row.ProductCode,
+					Tags:            row.Tags,
+				}); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "upsert device failed", "data": gin.H{"device_id": row.DeviceID}})
+					return
+				}
+			}
+
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"total_rows": len(rows), "imported_count": len(rows), "failed_count": 0, "errors": []deviceCSVRowError{}}})
+		})
+
 		api.PATCH("/packages/:package_id/status", func(c *gin.Context) {
 			if !hasBearer(c.GetHeader("Authorization")) {
 				c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
@@ -927,6 +1017,10 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 		})
 
 		device.POST("/check-update", func(c *gin.Context) {
+			if !requireDeviceAPIAuth(c, cfg) {
+				return
+			}
+
 			var req struct {
 				DeviceID        string `json:"device_id"`
 				Group           string `json:"group"`
@@ -1006,10 +1100,18 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 		})
 
 		device.POST("/report-status", func(c *gin.Context) {
+			if !requireDeviceAPIAuth(c, cfg) {
+				return
+			}
+
 			var req struct {
-				DeviceID string `json:"device_id"`
-				TaskID   string `json:"task_id"`
-				Status   string `json:"status"`
+				DeviceID      string `json:"device_id"`
+				TaskID        string `json:"task_id"`
+				Status        string `json:"status"`
+				SourceVersion string `json:"source_version"`
+				TargetVersion string `json:"target_version"`
+				ErrorCode     string `json:"error_code"`
+				ErrorMessage  string `json:"error_message"`
 			}
 			if err := c.ShouldBindJSON(&req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "invalid request"})
@@ -1051,15 +1153,29 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 			}
 
 			if _, err := q.UpsertUpgradeRecord(c.Request.Context(), store.UpsertUpgradeRecordParams{
-				DeviceID: req.DeviceID,
-				TaskID:   req.TaskID,
-				Status:   normalizedStatus,
+				DeviceID:      req.DeviceID,
+				TaskID:        req.TaskID,
+				Status:        normalizedStatus,
+				SourceVersion: strings.TrimSpace(req.SourceVersion),
+				TargetVersion: strings.TrimSpace(req.TargetVersion),
+				ErrorCode:     strings.TrimSpace(req.ErrorCode),
 			}); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "upsert upgrade record failed"})
 				return
 			}
 
-			respObj := gin.H{"code": 0, "message": "Status received", "data": gin.H{"idempotency_key": idemKey, "status": normalizedStatus}}
+			respData := gin.H{
+				"idempotency_key": idemKey,
+				"status":          normalizedStatus,
+				"source_version":  strings.TrimSpace(req.SourceVersion),
+				"target_version":  strings.TrimSpace(req.TargetVersion),
+				"error_code":      strings.TrimSpace(req.ErrorCode),
+			}
+			if msg := strings.TrimSpace(req.ErrorMessage); msg != "" {
+				respData["error_message"] = msg
+			}
+
+			respObj := gin.H{"code": 0, "message": "Status received", "data": respData}
 			respBytes, _ := json.Marshal(respObj)
 			idem, err := q.CreateIdempotency(c.Request.Context(), store.CreateIdempotencyParams{IdemKey: idemKey, Response: respBytes})
 			if err != nil {
@@ -1085,6 +1201,33 @@ func hasBearer(header string) bool {
 	}
 	parts := strings.SplitN(header, " ", 2)
 	return len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && strings.TrimSpace(parts[1]) != ""
+}
+
+func requireDeviceAPIAuth(c *gin.Context, cfg *config.Config) bool {
+	if !cfg.Auth.DeviceAPIAuthEnabled {
+		return true
+	}
+
+	expected := strings.TrimSpace(cfg.Auth.DeviceAPIToken)
+	if expected == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "device api token is not configured"})
+		return false
+	}
+
+	header := c.GetHeader("Authorization")
+	if !hasBearer(header) {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
+		return false
+	}
+
+	parts := strings.SplitN(header, " ", 2)
+	provided := strings.TrimSpace(parts[1])
+	if subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
+		return false
+	}
+
+	return true
 }
 
 func operatorFromBearer(header string, cfg *config.Config) (string, bool) {

@@ -66,6 +66,25 @@ export interface User {
   roles: string[];
 }
 
+export interface DeviceCatalogItem {
+  device_id: string;
+  device_group: string;
+  product_model: string;
+  hardware_version: string;
+  current_version: string;
+  product_code: string;
+  last_heartbeat: string;
+  tags: Record<string, unknown>;
+  registered_at: string;
+}
+
+export interface DeviceCSVImportResult {
+  total_rows: number;
+  imported_count: number;
+  failed_count: number;
+  errors: Array<{ row: number; message: string }>;
+}
+
 export interface CreateUserPayload {
   username: string;
   display_name: string;
@@ -156,6 +175,21 @@ export const taskAPI = {
       api.post(`/release-tasks/${id}/actions`, { action, reason })
     ),
   audits: (id: string) => wrap<AuditLog[]>(api.get(`/release-tasks/${id}/audits`)),
+};
+
+export const deviceAPI = {
+  list: (limit = 20, offset = 0) =>
+    wrap<{ devices: DeviceCatalogItem[]; total: number }>(
+      api.get('/devices', { params: { limit, offset } })
+    ),
+  importCSV: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return wrap<DeviceCSVImportResult>(
+      api.post('/devices/import-csv', form)
+    );
+  },
+  downloadTemplate: () => api.get('/devices/csv-template', { responseType: 'blob' }),
 };
 
 export const dashboardAPI = {

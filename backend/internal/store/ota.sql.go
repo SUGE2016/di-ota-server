@@ -639,7 +639,7 @@ func (q *Queries) ListReleaseTasks(ctx context.Context, arg ListReleaseTasksPara
 }
 
 const listUpgradeRecordsByTask = `-- name: ListUpgradeRecordsByTask :many
-SELECT id, device_id, task_id, status, created_at
+SELECT id, device_id, task_id, status, created_at, source_version, target_version, error_code
 FROM t_upgrade_record
 WHERE task_id = $1
 ORDER BY created_at DESC
@@ -652,6 +652,9 @@ type ListUpgradeRecordsByTaskRow struct {
 	TaskID    string    `json:"task_id"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
+	SourceVersion string `json:"source_version"`
+	TargetVersion string `json:"target_version"`
+	ErrorCode     string `json:"error_code"`
 }
 
 func (q *Queries) ListUpgradeRecordsByTask(ctx context.Context, taskID string) ([]ListUpgradeRecordsByTaskRow, error) {
@@ -669,6 +672,9 @@ func (q *Queries) ListUpgradeRecordsByTask(ctx context.Context, taskID string) (
 			&i.TaskID,
 			&i.Status,
 			&i.CreatedAt,
+			&i.SourceVersion,
+			&i.TargetVersion,
+			&i.ErrorCode,
 		); err != nil {
 			return nil, err
 		}
@@ -819,33 +825,52 @@ const upsertUpgradeRecord = `-- name: UpsertUpgradeRecord :one
 INSERT INTO t_upgrade_record (
   device_id,
   task_id,
-  status
+  status,
+  source_version,
+  target_version,
+  error_code
 ) VALUES (
-  $1, $2, $3
+  $1, $2, $3, $4, $5, $6
 )
 ON CONFLICT (device_id, task_id)
 DO UPDATE SET
   status = EXCLUDED.status,
+  source_version = EXCLUDED.source_version,
+  target_version = EXCLUDED.target_version,
+  error_code = EXCLUDED.error_code,
   created_at = NOW()
-RETURNING id, device_id, task_id, status, created_at
+RETURNING id, device_id, task_id, status, created_at, source_version, target_version, error_code
 `
 
 type UpsertUpgradeRecordParams struct {
-	DeviceID string `json:"device_id"`
-	TaskID   string `json:"task_id"`
-	Status   string `json:"status"`
+	DeviceID      string `json:"device_id"`
+	TaskID        string `json:"task_id"`
+	Status        string `json:"status"`
+	SourceVersion string `json:"source_version"`
+	TargetVersion string `json:"target_version"`
+	ErrorCode     string `json:"error_code"`
 }
 
 type UpsertUpgradeRecordRow struct {
-	ID        int64     `json:"id"`
-	DeviceID  string    `json:"device_id"`
-	TaskID    string    `json:"task_id"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	ID            int64     `json:"id"`
+	DeviceID      string    `json:"device_id"`
+	TaskID        string    `json:"task_id"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
+	SourceVersion string    `json:"source_version"`
+	TargetVersion string    `json:"target_version"`
+	ErrorCode     string    `json:"error_code"`
 }
 
 func (q *Queries) UpsertUpgradeRecord(ctx context.Context, arg UpsertUpgradeRecordParams) (UpsertUpgradeRecordRow, error) {
-	row := q.db.QueryRowContext(ctx, upsertUpgradeRecord, arg.DeviceID, arg.TaskID, arg.Status)
+	row := q.db.QueryRowContext(ctx, upsertUpgradeRecord,
+		arg.DeviceID,
+		arg.TaskID,
+		arg.Status,
+		arg.SourceVersion,
+		arg.TargetVersion,
+		arg.ErrorCode,
+	)
 	var i UpsertUpgradeRecordRow
 	err := row.Scan(
 		&i.ID,
@@ -853,6 +878,9 @@ func (q *Queries) UpsertUpgradeRecord(ctx context.Context, arg UpsertUpgradeReco
 		&i.TaskID,
 		&i.Status,
 		&i.CreatedAt,
+		&i.SourceVersion,
+		&i.TargetVersion,
+		&i.ErrorCode,
 	)
 	return i, err
 }

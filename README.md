@@ -43,6 +43,8 @@
    - `OIDC_STATE_TTL_SEC=300`
 - API 运行:
    - `API_AUTO_MIGRATE_ON_START=false`（默认关闭，建议通过迁移工具执行）
+   - `DEVICE_API_AUTH_ENABLED=false`（默认关闭；作为第三方 OTA 服务接入时建议开启）
+   - `DEVICE_API_TOKEN=<shared-device-token>`（设备或设备网关调用 `/device/v1/*` 时使用）
 - Worker:
    - `WORKER_TASK_STATS_RETENTION_HOURS=168`（默认保留最近 7 天快照）
 - Local Auth:
@@ -71,13 +73,16 @@
    - `POST /api/v1/packages/upload-url`
    - `POST /api/v1/packages/complete`
    - `POST /api/v1/packages`
+   - `GET /api/v1/devices`
+   - `GET /api/v1/devices/csv-template`
+   - `POST /api/v1/devices/import-csv`
    - `POST /api/v1/release-tasks`
    - `POST /api/v1/release-tasks/:task_id/actions`（pause/resume/rollback）
    - `GET /api/v1/release-tasks/:task_id/audits`
 - 设备端接口：
-   - `POST /device/v1/check-update`（按分组/产品型号/硬件版本筛选）
+   - `POST /device/v1/check-update`（按分组/产品型号/硬件版本筛选；启用 `DEVICE_API_AUTH_ENABLED` 后需带 Bearer token）
    - 返回真实 S3/MinIO 预签名下载 URL（失败时回落占位签名）
-   - `POST /device/v1/report-status`（支持幂等键）
+   - `POST /device/v1/report-status`（支持幂等键；要求 `task_id`，支持 `source_version`、`target_version`、`error_code`）
 - 本地对象存储：MinIO（自动创建 bucket: `ota-packages`）
 - `sqlc` 查询定义与生成代码（`backend/queries/ota.sql`、`backend/internal/store`）
 - React 管理台骨架页面
@@ -86,7 +91,15 @@
 ## 安全密钥说明
 - `JWT_SECRET`：管理端登录后签发 JWT 的签名密钥。
 - `DEVICE_SIGNING_SECRET`：设备请求签名（HMAC）校验密钥。
+- `DEVICE_API_TOKEN`：设备或设备网关调用 OTA 设备接口时使用的共享 Bearer token。
 - `OIDC_CLIENT_SECRET`：SSO 对接 OIDC 提供方的客户端密钥。
+
+## 第三方接入说明
+1. `ota-server` 可作为独立第三方 OTA 服务对外提供 `/device/v1/check-update` 与 `/device/v1/report-status`。
+2. 设备直接调用 `ota-server`，主系统不代理 OTA 请求、不共享 OTA 数据库。
+3. OTA 任务选设备依赖 CSV 设备清单导入，模板字段为 `device_id,product_code,product_model,hardware_version,current_version,device_group,tags`。
+4. 设备升级检查成功后应保存 `task_id`，并在升级结果上报时回传 `task_id`。
+5. 设备结果上报建议包含：`device_id`、`task_id`、`status`、`source_version`、`target_version`；失败场景补充 `error_code`。
 
 ## 下一步
 1. 增加 OIDC 交换失败场景的细粒度错误码与重试策略。

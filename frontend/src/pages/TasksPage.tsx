@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, DatePicker, Form, Input, InputNumber, Switch, Select, message, Modal, Table, Tag, Typography } from 'antd';
+import { AutoComplete, Button, Card, DatePicker, Form, Input, InputNumber, Switch, Select, message, Modal, Table, Tag, Typography } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { ReleaseTask, taskAPI } from '../api';
+import { DeviceCatalogItem, ReleaseTask, deviceAPI, taskAPI } from '../api';
 
 const { Paragraph, Title } = Typography;
 
@@ -27,6 +27,7 @@ export function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [devices, setDevices] = useState<DeviceCatalogItem[]>([]);
   const [form] = Form.useForm();
   const navigate = useNavigate();
 
@@ -41,6 +42,12 @@ export function TasksPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    deviceAPI.list(200, 0)
+      .then((data) => setDevices(data.devices))
+      .catch(() => setDevices([]));
+  }, []);
 
   const handleCreate = async (values: any) => {
     setCreating(true);
@@ -112,6 +119,10 @@ export function TasksPage() {
       .includes(key);
   });
 
+  const catalogOptions = (field: keyof Pick<DeviceCatalogItem, 'device_group' | 'product_model' | 'hardware_version'>) =>
+    Array.from(new Set(devices.map((device) => device[field]).filter(Boolean)))
+      .map((value) => ({ value }));
+
   return (
     <div className="ota-page">
       <div>
@@ -159,13 +170,13 @@ export function TasksPage() {
               <Input placeholder="pkg-xxx" />
             </Form.Item>
             <Form.Item name="group" label="目标分组" rules={[{ required: true }]}>
-              <Input />
+              <AutoComplete options={catalogOptions('device_group')} />
             </Form.Item>
             <Form.Item name="product_model" label="产品型号" rules={[{ required: true }]}>
-              <Input />
+              <AutoComplete options={catalogOptions('product_model')} />
             </Form.Item>
             <Form.Item name="hardware_version" label="硬件版本" rules={[{ required: true }]}>
-              <Input />
+              <AutoComplete options={catalogOptions('hardware_version')} />
             </Form.Item>
             <Form.Item name="failure_threshold" label="失败阈值">
               <InputNumber min={0.0001} max={1} defaultValue={0.05} step={0.01} style={{ width: '100%' }} />

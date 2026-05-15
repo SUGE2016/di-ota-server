@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 )
 
 type CreateReleaseTaskExtParams struct {
@@ -127,4 +128,62 @@ WHERE device_id = $1 AND task_id = $2
 		return sql.NullString{}, nil
 	}
 	return status, err
+}
+
+type UpsertDeviceCatalogParams struct {
+	DeviceID        string
+	DeviceGroup     string
+	ProductModel    string
+	HardwareVersion string
+	CurrentVersion  string
+	ProductCode     string
+	Tags            json.RawMessage
+}
+
+func (q *Queries) UpsertDeviceCatalog(ctx context.Context, arg UpsertDeviceCatalogParams) (TDevice, error) {
+	row := q.db.QueryRowContext(ctx, `
+INSERT INTO t_device (
+  device_id,
+  device_group,
+  product_model,
+  hardware_version,
+  current_version,
+  product_code,
+  tags
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7
+)
+ON CONFLICT (device_id)
+DO UPDATE SET
+  device_group = EXCLUDED.device_group,
+  product_model = EXCLUDED.product_model,
+  hardware_version = EXCLUDED.hardware_version,
+  current_version = EXCLUDED.current_version,
+  product_code = EXCLUDED.product_code,
+  tags = EXCLUDED.tags,
+  last_heartbeat = NOW()
+RETURNING device_id, device_group, product_model, hardware_version, current_version, last_heartbeat, product_code, tags, registered_at
+`,
+		arg.DeviceID,
+		arg.DeviceGroup,
+		arg.ProductModel,
+		arg.HardwareVersion,
+		arg.CurrentVersion,
+		arg.ProductCode,
+		arg.Tags,
+	)
+
+	var out TDevice
+	err := row.Scan(
+		&out.DeviceID,
+		&out.DeviceGroup,
+		&out.ProductModel,
+		&out.HardwareVersion,
+		&out.CurrentVersion,
+		&out.LastHeartbeat,
+		&out.ProductCode,
+		&out.Tags,
+		&out.RegisteredAt,
+	)
+	return out, err
 }

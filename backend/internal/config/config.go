@@ -59,6 +59,8 @@ type S3Config struct {
 type AuthConfig struct {
 	JWTSecret           string
 	DeviceSigningSecret string
+	DeviceAPIAuthEnabled bool
+	DeviceAPIToken       string
 	LocalAuthEnabled    bool
 	LocalAdminUsername  string
 	LocalAdminPassHash  string
@@ -115,6 +117,8 @@ func Load() (*Config, error) {
 		Auth: AuthConfig{
 			JWTSecret:           getEnv("JWT_SECRET", "change-me-jwt-secret"),
 			DeviceSigningSecret: getEnv("DEVICE_SIGNING_SECRET", "change-me-device-secret"),
+			DeviceAPIAuthEnabled: getEnv("DEVICE_API_AUTH_ENABLED", "false") == "true",
+			DeviceAPIToken:       getEnv("DEVICE_API_TOKEN", ""),
 			LocalAuthEnabled:    getEnv("LOCAL_AUTH_ENABLED", "false") == "true",
 			LocalAdminUsername:  getEnv("LOCAL_ADMIN_USERNAME", "admin"),
 			LocalAdminPassHash:  getEnv("LOCAL_ADMIN_PASSWORD_HASH", ""),

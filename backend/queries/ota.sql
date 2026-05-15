@@ -54,15 +54,21 @@ ORDER BY created_at DESC;
 INSERT INTO t_upgrade_record (
   device_id,
   task_id,
-  status
+  status,
+  source_version,
+  target_version,
+  error_code
 ) VALUES (
-  $1, $2, $3
+  $1, $2, $3, $4, $5, $6
 )
 ON CONFLICT (device_id, task_id)
 DO UPDATE SET
   status = EXCLUDED.status,
+  source_version = EXCLUDED.source_version,
+  target_version = EXCLUDED.target_version,
+  error_code = EXCLUDED.error_code,
   created_at = NOW()
-RETURNING id, device_id, task_id, status, created_at;
+RETURNING id, device_id, task_id, status, created_at, source_version, target_version, error_code;
 
 -- name: CreateAuditLog :one
 INSERT INTO t_audit_log (
@@ -133,7 +139,7 @@ ORDER BY snapshot_time DESC
 LIMIT 1;
 
 -- name: ListUpgradeRecordsByTask :many
-SELECT id, device_id, task_id, status, created_at
+SELECT id, device_id, task_id, status, created_at, source_version, target_version, error_code
 FROM t_upgrade_record
 WHERE task_id = $1
 ORDER BY created_at DESC
