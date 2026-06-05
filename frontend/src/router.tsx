@@ -11,6 +11,7 @@ import { DevicesPage } from './pages/DevicesPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { UserDetailPage } from './pages/UserDetailPage';
 import { DeviceDetailPage } from './pages/DeviceDetailPage';
+import { DeviceSimulatorPage } from './pages/DeviceSimulatorPage';
 import useAuthStore from './stores/authStore';
 
 function PrivateRoute() {
@@ -23,6 +24,7 @@ function PrivateRoute() {
 
 export const router = createHashRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/simulator', element: <DeviceSimulatorPage /> },
   {
     element: <PrivateRoute />,
     children: [

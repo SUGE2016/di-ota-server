@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Alert, Button, Divider, Form, Input, Card, message, Space, Typography } from 'antd';
+import { Button, Divider, Form, Input, Card, message, Typography } from 'antd';
 import { UserOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '../api';
 import useAuthStore from '../stores/authStore';
+import { APP_VERSION_LABEL, COPYRIGHT_HOLDER } from '../constants/version';
 
 const { Paragraph, Title } = Typography;
 
@@ -38,14 +39,6 @@ export function LoginPage() {
 
       <div className="ota-login-card-zone">
         <Card title="登录管理台" className="ota-card" style={{ width: 420 }}>
-          <Space direction="vertical" size={12} style={{ width: '100%', marginBottom: 16 }}>
-            <Alert
-              type="info"
-              showIcon
-              message="认证入口"
-              description="当前已预留本地登录和 SSO 登录入口。外部系统授权态将在完成 OAuth 对接后接入。"
-            />
-          </Space>
           <Form onFinish={onFinish} size="large" layout="vertical">
             <Form.Item name="username" label="用户名" rules={[{ required: true, message: '请输入用户名' }]}>
               <Input prefix={<UserOutlined />} placeholder="请输入账号" />
@@ -63,6 +56,13 @@ export function LoginPage() {
           <Button icon={<SafetyCertificateOutlined />} size="large" block disabled>
             SSO 登录（待接入）
           </Button>
+          <div className="ota-login-meta">
+            <span>© {COPYRIGHT_HOLDER}</span>
+            <span>{APP_VERSION_LABEL}</span>
+          </div>
+          <div className="ota-login-extra">
+            <Link to="/simulator">设备端模拟器</Link>
+          </div>
         </Card>
       </div>
     </div>

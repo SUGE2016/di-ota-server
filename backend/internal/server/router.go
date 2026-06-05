@@ -586,16 +586,20 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 			}
 
 			for _, row := range rows {
-				if _, err := q.UpsertDeviceCatalog(c.Request.Context(), store.UpsertDeviceCatalogParams{
+				in := CatalogDeviceInput{
 					DeviceID:        row.DeviceID,
-					DeviceGroup:     row.DeviceGroup,
+					ProductCode:     row.ProductCode,
 					ProductModel:    row.ProductModel,
 					HardwareVersion: row.HardwareVersion,
 					CurrentVersion:  row.CurrentVersion,
-					ProductCode:     row.ProductCode,
+					DeviceGroup:     row.DeviceGroup,
 					Tags:            row.Tags,
-				}); err != nil {
+				}
+				if _, reject, err := applyCatalogDevice(c.Request.Context(), q, "csv", CatalogSyncOptions{}, in); err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "upsert device failed", "data": gin.H{"device_id": row.DeviceID}})
+					return
+				} else if reject != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": reject.Message, "data": gin.H{"device_id": row.DeviceID}})
 					return
 				}
 			}
@@ -892,6 +896,12 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "create task failed"})
 				return
 			}
+			if task.State == "Running" {
+				if err := buildTaskSnapshot(c.Request.Context(), q, task); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "build task snapshot failed"})
+					return
+				}
+			}
 
 			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": task})
 		})
@@ -948,6 +958,17 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "update task state failed"})
 				return
 			}
+			if action == "start" && afterTask.State == "Running" {
+				if err := buildTaskSnapshot(c.Request.Context(), q, store.TReleaseTask{
+					TaskID:          afterTask.TaskID,
+					TargetGroup:     afterTask.TargetGroup,
+					ProductModel:    afterTask.ProductModel,
+					HardwareVersion: afterTask.HardwareVersion,
+				}); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "build task snapshot failed"})
+					return
+				}
+			}
 
 			traceID := strings.TrimSpace(c.GetHeader("X-Trace-ID"))
 			if traceID == "" {
@@ -993,6 +1014,8 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 
 			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": logs})
 		})
+
+		registerIntegrationRoutes(api, cfg, q)
 	}
 
 	device := r.Group("/device/v1")
@@ -1020,83 +1043,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 			if !requireDeviceAPIAuth(c, cfg) {
 				return
 			}
-
-			var req struct {
-				DeviceID        string `json:"device_id"`
-				Group           string `json:"group"`
-				ProductModel    string `json:"product_model"`
-				HardwareVersion string `json:"hardware_version"`
-				CurrentVersion  string `json:"current_version"`
-			}
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "invalid request"})
-				return
-			}
-			if req.DeviceID == "" || req.Group == "" || req.ProductModel == "" || req.HardwareVersion == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "device_id/group/product_model/hardware_version are required"})
-				return
-			}
-
-			tasks, err := q.ListMatchingRunningTasksNow(c.Request.Context(), store.ListMatchingRunningTasksNowParams{
-				TargetGroup:     req.Group,
-				ProductModel:    req.ProductModel,
-				HardwareVersion: req.HardwareVersion,
-			})
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query tasks failed"})
-				return
-			}
-			if len(tasks) == 0 {
-				c.JSON(http.StatusOK, gin.H{"code": 2001, "message": "No available upgrade", "data": gin.H{"has_update": false}})
-				return
-			}
-
-			var task store.TReleaseTask
-			found := false
-			for _, candidate := range tasks {
-				if inCanaryRange(req.DeviceID, candidate.TaskID, candidate.CanaryPercent) {
-					task = candidate
-					found = true
-					break
-				}
-			}
-			if !found {
-				c.JSON(http.StatusOK, gin.H{"code": 2001, "message": "No available upgrade", "data": gin.H{"has_update": false}})
-				return
-			}
-
-			pkg, err := q.GetPackageByID(c.Request.Context(), task.PackageID)
-			if err != nil {
-				if err == sql.ErrNoRows {
-					c.JSON(http.StatusOK, gin.H{"code": 2001, "message": "No available upgrade", "data": gin.H{"has_update": false}})
-					return
-				}
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query package failed"})
-				return
-			}
-
-			threshold, _ := strconv.ParseFloat(task.FailureThreshold, 64)
-			downloadURL := buildSignedDownloadURL(cfg, pkg.PackageID)
-			c.JSON(http.StatusOK, gin.H{
-				"code":    0,
-				"message": "ok",
-				"data": gin.H{
-					"has_update":        true,
-					"task_id":           task.TaskID,
-					"package_id":        pkg.PackageID,
-					"target_version":    pkg.Version,
-					"file_hash":         pkg.FileHash,
-					"signature":         pkg.Signature,
-					"download_url":      downloadURL,
-					"current_version":   req.CurrentVersion,
-					"upgrade_mode":      "full",
-					"retry_policy":      "full-retry",
-					"target_group":      task.TargetGroup,
-					"target_model":      task.ProductModel,
-					"target_hardware":   task.HardwareVersion,
-					"failure_threshold": threshold,
-				},
-			})
+			handleCheckUpdate(c, cfg, q)
 		})
 
 		device.POST("/report-status", func(c *gin.Context) {
@@ -1162,6 +1109,13 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 			}); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "upsert upgrade record failed"})
 				return
+			}
+
+			if normalizedStatus == "Success" {
+				targetVer := strings.TrimSpace(req.TargetVersion)
+				if targetVer != "" {
+					_ = q.TouchDeviceReportedVersion(c.Request.Context(), req.DeviceID, targetVer)
+				}
 			}
 
 			respData := gin.H{

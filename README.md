@@ -94,6 +94,33 @@
 - `DEVICE_API_TOKEN`：设备或设备网关调用 OTA 设备接口时使用的共享 Bearer token。
 - `OIDC_CLIENT_SECRET`：SSO 对接 OIDC 提供方的客户端密钥。
 
+## 架构改进（v2，2026-06-05）
+
+在保留 **C 直连 O** 与 **O 升级决策权威** 前提下，允许 **B↔O 受控集成**（目录 sync + 待升级 hint），详见 [`doc/架构改进方案_v2_2026-06-05.md`](doc/架构改进方案_v2_2026-06-05.md)。
+
+### 已实现（v2）
+
+- P0：设备注册表校验、任务快照、`check-update` 拒绝码、Success 回写 `reported_version`
+- P1：`POST /api/v1/integrations/catalog/sync`（含版本倒退/身份冲突策略）
+- P2：`GET /api/v1/integrations/pending-upgrades`
+- 设备模拟器：[`cmd/device-simulator/README.md`](cmd/device-simulator/README.md)（Web：`http://localhost:5173/#/simulator`）
+
+### 本地联调（v2）
+
+```bash
+# 1. 启动栈（需 API_AUTO_MIGRATE_ON_START=true 或手动执行 005 迁移）
+docker compose up -d
+
+# 2. 导入设备（管理端 JWT 或 integration token）
+curl -H "Authorization: Bearer $TOKEN" -F file=@tests/fixtures/devices_valid.csv \
+  http://localhost:8080/api/v1/devices/import-csv
+
+# 3. 创建 Running 任务后，用模拟器走升级流程
+go run ./cmd/device-simulator/main.go -url http://localhost:8080 -device-id AMS000001
+```
+
+Integration 环境变量见 `.env.example`：`INTEGRATION_ENABLED`、`INTEGRATION_SERVICE_TOKEN`。
+
 ## 第三方接入说明
 1. `ota-server` 可作为独立第三方 OTA 服务对外提供 `/device/v1/check-update` 与 `/device/v1/report-status`。
 2. 设备直接调用 `ota-server`，主系统不代理 OTA 请求、不共享 OTA 数据库。

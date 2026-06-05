@@ -13,6 +13,9 @@ frontend/dist/
 .vscode/
 .DS_Store
 
+# local reference copy (main system backend)
+read-only/
+
 # local assistant config
 .claude/settings.local.json
 

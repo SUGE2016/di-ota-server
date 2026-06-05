@@ -18,6 +18,7 @@ type Config struct {
 	S3       S3Config
 	Auth     AuthConfig
 	OIDC     OIDCConfig
+	Integration IntegrationConfig
 }
 
 type APIConfig struct {
@@ -82,6 +83,11 @@ type OIDCConfig struct {
 	MockUser        string
 }
 
+type IntegrationConfig struct {
+	Enabled      bool
+	ServiceToken string
+}
+
 func Load() (*Config, error) {
 	_ = godotenv.Load()
 
@@ -137,6 +143,10 @@ func Load() (*Config, error) {
 			StateTTLSec:     getEnvInt64("OIDC_STATE_TTL_SEC", 300),
 			MockEnabled:     getEnv("OIDC_MOCK_ENABLED", "true") == "true",
 			MockUser:        getEnv("OIDC_MOCK_USER", "oidc-user"),
+		},
+		Integration: IntegrationConfig{
+			Enabled:      getEnv("INTEGRATION_ENABLED", "false") == "true",
+			ServiceToken: getEnv("INTEGRATION_SERVICE_TOKEN", ""),
 		},
 	}
 
