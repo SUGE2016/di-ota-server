@@ -67,6 +67,21 @@ RETURNING task_id, package_id, target_group, product_model, hardware_version,
 	return out, err
 }
 
+func (q *Queries) GetReleaseTaskExt(ctx context.Context, taskID string) (TReleaseTask, error) {
+	row := q.db.QueryRowContext(ctx, `
+SELECT task_id, package_id, target_group, product_model, hardware_version,
+       failure_threshold, state, created_at, canary_percent, schedule_time, force_upgrade
+FROM t_release_task
+WHERE task_id = $1
+`, taskID)
+	var out TReleaseTask
+	err := row.Scan(
+		&out.TaskID, &out.PackageID, &out.TargetGroup, &out.ProductModel, &out.HardwareVersion,
+		&out.FailureThreshold, &out.State, &out.CreatedAt, &out.CanaryPercent, &out.ScheduleTime, &out.ForceUpgrade,
+	)
+	return out, err
+}
+
 type ListMatchingRunningTasksNowParams struct {
 	TargetGroup     string
 	ProductModel    string

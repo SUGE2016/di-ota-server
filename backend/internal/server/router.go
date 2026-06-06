@@ -218,7 +218,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "count users failed"})
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"users": users, "total": count}})
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"users": mapUserRecords(users), "total": count}})
 		})
 
 		api.GET("/users/:user_id", func(c *gin.Context) {
@@ -241,7 +241,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query user failed"})
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": user})
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": mapUserRecord(user)})
 		})
 
 		api.POST("/users", func(c *gin.Context) {
@@ -327,7 +327,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				return
 			}
 			writeUserAudit(c.Request.Context(), q, operator, "USER_CREATE", user.UserID, nil, user)
-			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": user})
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": mapUserRecord(user)})
 		})
 
 		api.PATCH("/users/:user_id/status", func(c *gin.Context) {
@@ -368,7 +368,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				return
 			}
 			writeUserAudit(c.Request.Context(), q, operator, "USER_STATUS_UPDATE", userID, beforeUser, user)
-			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": user})
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": mapUserRecord(user)})
 		})
 
 		api.PATCH("/users/:user_id/roles", func(c *gin.Context) {
@@ -413,7 +413,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				return
 			}
 			writeUserAudit(c.Request.Context(), q, operator, "USER_ROLE_UPDATE", userID, beforeUser, user)
-			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": user})
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": mapUserRecord(user)})
 		})
 
 		api.POST("/users/:user_id/reset-password", func(c *gin.Context) {
@@ -463,7 +463,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				return
 			}
 			writeUserAudit(c.Request.Context(), q, operator, "USER_PASSWORD_RESET", userID, beforeUser, gin.H{"user_id": userID, "password_reset": true})
-			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": user})
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": mapUserRecord(user)})
 		})
 
 		api.GET("/packages", func(c *gin.Context) {
@@ -533,13 +533,18 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				}
 			}
 
-			devices, err := q.ListDevices(c.Request.Context(), store.ListDevicesParams{Limit: int32(limit), Offset: int32(offset)})
+			filter := parseDeviceCatalogFilter(c, limit, offset)
+			devices, err := q.ListDeviceCatalogFiltered(c.Request.Context(), filter)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query devices failed"})
 				return
 			}
-			count, _ := q.CountDevices(c.Request.Context())
-			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"devices": devices, "total": count}})
+			count, err := q.CountDeviceCatalogFiltered(c.Request.Context(), filter)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "count devices failed"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"devices": mapDeviceRegistryList(devices), "total": count}})
 		})
 
 		api.GET("/devices/csv-template", func(c *gin.Context) {
@@ -605,6 +610,54 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 			}
 
 			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"total_rows": len(rows), "imported_count": len(rows), "failed_count": 0, "errors": []deviceCSVRowError{}}})
+		})
+
+		api.GET("/devices/:device_id/upgrade-records", func(c *gin.Context) {
+			if !hasBearer(c.GetHeader("Authorization")) {
+				c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
+				return
+			}
+			deviceID := strings.TrimSpace(c.Param("device_id"))
+			if deviceID == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "device_id is required"})
+				return
+			}
+			if _, err := q.GetDeviceRegistry(c.Request.Context(), deviceID); err != nil {
+				if err == sql.ErrNoRows {
+					c.JSON(http.StatusNotFound, gin.H{"code": 2004, "message": "device not found"})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query device failed"})
+				return
+			}
+			records, err := q.ListUpgradeRecordsByDevice(c.Request.Context(), deviceID, parseUpgradeRecordLimit(c))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query upgrade records failed"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"records": mapUpgradeRecords(records)}})
+		})
+
+		api.GET("/devices/:device_id", func(c *gin.Context) {
+			if !hasBearer(c.GetHeader("Authorization")) {
+				c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
+				return
+			}
+			deviceID := strings.TrimSpace(c.Param("device_id"))
+			if deviceID == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "device_id is required"})
+				return
+			}
+			device, err := q.GetDeviceRegistry(c.Request.Context(), deviceID)
+			if err != nil {
+				if err == sql.ErrNoRows {
+					c.JSON(http.StatusNotFound, gin.H{"code": 2004, "message": "device not found"})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query device failed"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": mapDeviceRegistry(device)})
 		})
 
 		api.PATCH("/packages/:package_id/status", func(c *gin.Context) {
@@ -788,7 +841,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query tasks failed"})
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": tasks})
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": mapReleaseTaskListRows(tasks)})
 		})
 
 		api.GET("/release-tasks/:task_id", func(c *gin.Context) {
@@ -801,7 +854,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "task_id is required"})
 				return
 			}
-			task, err := q.GetReleaseTaskByID(c.Request.Context(), taskID)
+			task, err := q.GetReleaseTaskExt(c.Request.Context(), taskID)
 			if err != nil {
 				if err == sql.ErrNoRows {
 					c.JSON(http.StatusNotFound, gin.H{"code": 2004, "message": "task not found"})
@@ -815,7 +868,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 			if statsErr == nil {
 				statsData = stats
 			}
-			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"task": task, "stats": statsData}})
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"task": mapTReleaseTask(task), "stats": statsData}})
 		})
 
 		api.POST("/release-tasks", func(c *gin.Context) {
@@ -897,13 +950,25 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				return
 			}
 			if task.State == "Running" {
-				if err := buildTaskSnapshot(c.Request.Context(), q, task); err != nil {
+				matched, err := buildTaskSnapshot(c.Request.Context(), q, task)
+				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "build task snapshot failed"})
+					return
+				}
+				if matched == 0 {
+					if _, revertErr := q.UpdateReleaseTaskState(c.Request.Context(), store.UpdateReleaseTaskStateParams{
+						TaskID: task.TaskID,
+						State:  "Draft",
+					}); revertErr != nil {
+						c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "revert task state failed"})
+						return
+					}
+					c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "no devices matched task scope"})
 					return
 				}
 			}
 
-			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": task})
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": mapTReleaseTask(task)})
 		})
 
 		api.POST("/release-tasks/:task_id/actions", func(c *gin.Context) {
@@ -958,8 +1023,8 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "update task state failed"})
 				return
 			}
-			if action == "start" && afterTask.State == "Running" {
-				if err := buildTaskSnapshot(c.Request.Context(), q, store.TReleaseTask{
+			if afterTask.State == "Running" {
+				if _, err := buildTaskSnapshot(c.Request.Context(), q, store.TReleaseTask{
 					TaskID:          afterTask.TaskID,
 					TargetGroup:     afterTask.TargetGroup,
 					ProductModel:    afterTask.ProductModel,
@@ -991,7 +1056,13 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				return
 			}
 
-			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"task": afterTask, "audit_log": audit}})
+			fullTask, err := q.GetReleaseTaskExt(c.Request.Context(), taskID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query task failed"})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"task": mapTReleaseTask(fullTask), "audit_log": mapAuditLog(audit)}})
 		})
 
 		api.GET("/release-tasks/:task_id/audits", func(c *gin.Context) {
@@ -1012,7 +1083,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				return
 			}
 
-			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": logs})
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": mapAuditLogs(logs)})
 		})
 
 		registerIntegrationRoutes(api, cfg, q)
@@ -1084,6 +1155,9 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 			if existing, err := q.GetIdempotency(c.Request.Context(), idemKey); err == nil {
 				var out gin.H
 				if json.Unmarshal(existing.Response, &out) == nil {
+					if normalizedStatus == "Success" {
+						ensureDeviceReportedVersion(c.Request.Context(), q, req.DeviceID, req.TargetVersion)
+					}
 					c.JSON(http.StatusOK, out)
 					return
 				}
@@ -1112,10 +1186,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 			}
 
 			if normalizedStatus == "Success" {
-				targetVer := strings.TrimSpace(req.TargetVersion)
-				if targetVer != "" {
-					_ = q.TouchDeviceReportedVersion(c.Request.Context(), req.DeviceID, targetVer)
-				}
+				ensureDeviceReportedVersion(c.Request.Context(), q, req.DeviceID, req.TargetVersion)
 			}
 
 			respData := gin.H{
@@ -1566,7 +1637,7 @@ func discoverOIDCEndpoints(ctx context.Context, cfg *config.Config) (*oidcEndpoi
 }
 
 func buildS3PresignedDownloadURL(cfg *config.Config, packageID string) (string, error) {
-	client, err := buildMinIOClient(cfg)
+	client, err := buildMinIOPresignClient(cfg)
 	if err != nil {
 		return "", err
 	}
@@ -1585,7 +1656,7 @@ func buildS3PresignedDownloadURL(cfg *config.Config, packageID string) (string, 
 }
 
 func buildS3PresignedUploadURL(cfg *config.Config, packageID string) (string, string, time.Time, error) {
-	client, err := buildMinIOClient(cfg)
+	client, err := buildMinIOPresignClient(cfg)
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
@@ -1627,6 +1698,43 @@ func buildMinIOClient(cfg *config.Config) (*minio.Client, error) {
 	}
 
 	return client, nil
+}
+
+func buildMinIOPresignClient(cfg *config.Config) (*minio.Client, error) {
+	host, secure, err := s3PresignEndpoint(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := minio.New(host, &minio.Options{
+		Creds:  minioCreds.NewStaticV4(cfg.S3.AccessKeyID, cfg.S3.SecretAccessKey, ""),
+		Secure: secure,
+		Region: strings.TrimSpace(cfg.S3.Region),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func s3PresignEndpoint(cfg *config.Config) (host string, secure bool, err error) {
+	if base := strings.TrimSpace(cfg.S3.PublicBaseURL); base != "" {
+		u, parseErr := url.Parse(base)
+		if parseErr != nil || strings.TrimSpace(u.Host) == "" {
+			return "", false, fmt.Errorf("invalid S3 public base URL")
+		}
+		return u.Host, strings.EqualFold(u.Scheme, "https"), nil
+	}
+
+	u, parseErr := url.Parse(strings.TrimSpace(cfg.S3.Endpoint))
+	if parseErr != nil {
+		return "", false, parseErr
+	}
+	if strings.TrimSpace(u.Host) == "" {
+		return "", false, fmt.Errorf("invalid S3 endpoint")
+	}
+	return u.Host, strings.EqualFold(u.Scheme, "https"), nil
 }
 
 func validateUploadedObject(cfg *config.Config, packageID, expectedHash string, expectedSize int64) error {

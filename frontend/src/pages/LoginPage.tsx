@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Button, Divider, Form, Input, Card, message, Typography } from 'antd';
-import { UserOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { Button, Form, Input, Card, message, Typography } from 'antd';
+import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '../api';
 import useAuthStore from '../stores/authStore';
@@ -52,10 +52,6 @@ export function LoginPage() {
               </Button>
             </Form.Item>
           </Form>
-          <Divider plain>或</Divider>
-          <Button icon={<SafetyCertificateOutlined />} size="large" block disabled>
-            SSO 登录（待接入）
-          </Button>
           <div className="ota-login-meta">
             <span>© {COPYRIGHT_HOLDER}</span>
             <span>{APP_VERSION_LABEL}</span>

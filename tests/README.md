@@ -40,12 +40,15 @@ cd backend && go test -tags=e2e ./tests/integration/ -run TestE2E -v
 | 模块 | Spec | 单元测试 | 集成测试 |
 |------|------|----------|----------|
 | 设备 CSV | specs/device_csv.md | internal/server/device_csv*_test.go | — |
-| 设备 API | specs/device_api.md | internal/server/router_state_test.go | tests/integration/device_auth_test.go |
-| 升级状态机 | specs/upgrade_state_machine.md | upgrade_status_test.go, canary_test.go | device_report_status_test.go |
+| 设备管理 | specs/device_management.md | device_handlers.go | device_management_test.go |
+| 设备 API | specs/device_api.md | internal/server/router_state_test.go, s3_presign_test.go | device_auth_test.go, check_update_v2_test.go |
+| 升级状态机 | specs/upgrade_state_machine.md | upgrade_status_test.go, canary_test.go | device_report_status_test.go, report_status_v2_test.go |
 | 发布全链路 | specs/release_task_flow.md | — | e2e_flow_test.go（占位） |
-| B→O 目录同步 | specs/integration_catalog.md | — | 待 P1 实现 |
+| 任务快照 | specs/task_snapshot.md | catalog_sync_test.go | task_snapshot_test.go |
+| B→O 目录同步 | specs/integration_catalog.md | catalog_sync_test.go | catalog_sync_test.go |
 | 待升级 hint | specs/integration_hint.md | — | 待 P2 实现 |
-| check-update v2 | specs/check_update_v2.md | — | 待 P0 实现 |
+| check-update v2 | specs/check_update_v2.md | version_compare_test.go | check_update_v2_test.go |
+| 管理端 JSON | specs/api_response.md | api_dto_test.go | api_response_test.go |
 | 健康检查 | — | — | health_test.go |
 | Worker 统计 | — | cmd/worker/main_test.go | — |
 

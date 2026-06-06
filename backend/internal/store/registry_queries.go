@@ -23,13 +23,14 @@ type DeviceRegistry struct {
 	EligibilityState   string
 	InconsistencyFlags json.RawMessage
 	LastSeenAt         sql.NullTime
+	LastHeartbeat      time.Time
 	RegisteredAt       time.Time
 }
 
 const deviceRegistrySelect = `
 SELECT device_id, device_group, product_model, hardware_version, product_code, tags,
        current_version, reported_version, catalog_version, catalog_synced_at, catalog_source,
-       eligibility_state, inconsistency_flags, last_seen_at, registered_at
+       eligibility_state, inconsistency_flags, last_seen_at, registered_at, last_heartbeat
 FROM t_device
 `
 
@@ -51,6 +52,7 @@ func scanDeviceRegistry(row scanner) (DeviceRegistry, error) {
 		&d.InconsistencyFlags,
 		&d.LastSeenAt,
 		&d.RegisteredAt,
+		&d.LastHeartbeat,
 	)
 	return d, err
 }
@@ -93,7 +95,7 @@ INSERT INTO t_device (
 )
 RETURNING device_id, device_group, product_model, hardware_version, product_code, tags,
           current_version, reported_version, catalog_version, catalog_synced_at, catalog_source,
-          eligibility_state, inconsistency_flags, last_seen_at, registered_at
+          eligibility_state, inconsistency_flags, last_seen_at, registered_at, last_heartbeat
 `, arg.DeviceID, arg.DeviceGroup, arg.ProductModel, arg.HardwareVersion, arg.ProductCode, arg.Tags,
 		arg.CurrentVersion, arg.ReportedVersion, arg.CatalogVersion, arg.CatalogSource, arg.InconsistencyFlags)
 	return scanDeviceRegistry(row)
@@ -131,7 +133,7 @@ UPDATE t_device SET
 WHERE device_id = $1
 RETURNING device_id, device_group, product_model, hardware_version, product_code, tags,
           current_version, reported_version, catalog_version, catalog_synced_at, catalog_source,
-          eligibility_state, inconsistency_flags, last_seen_at, registered_at
+          eligibility_state, inconsistency_flags, last_seen_at, registered_at, last_heartbeat
 `, arg.DeviceID, arg.DeviceGroup, arg.ProductModel, arg.HardwareVersion, arg.ProductCode, arg.Tags,
 		arg.CatalogVersion, arg.ReportedVersion, arg.CurrentVersion, arg.CatalogSource, arg.InconsistencyFlags)
 	return scanDeviceRegistry(row)
@@ -181,6 +183,74 @@ WHERE device_group = $1 AND product_model = $2 AND hardware_version = $3
 	}
 	return out, rows.Err()
 }
+
+func (q *Queries) ListDeviceCatalog(ctx context.Context, limit, offset int32) ([]DeviceRegistry, error) {
+	return q.ListDeviceCatalogFiltered(ctx, ListDeviceCatalogFilter{Limit: limit, Offset: offset})
+}
+
+type ListDeviceCatalogFilter struct {
+	Limit              int32
+	Offset             int32
+	Search             string
+	DeviceGroup        string
+	ProductModel       string
+	Tag                string
+	EligibilityState   string
+	AbnormalOnly       bool
+}
+
+func (q *Queries) ListDeviceCatalogFiltered(ctx context.Context, arg ListDeviceCatalogFilter) ([]DeviceRegistry, error) {
+	if arg.Limit <= 0 || arg.Limit > 200 {
+		arg.Limit = 20
+	}
+	if arg.Offset < 0 {
+		arg.Offset = 0
+	}
+	rows, err := q.db.QueryContext(ctx, deviceRegistrySelect+deviceCatalogWhereClause+`
+ ORDER BY last_heartbeat DESC LIMIT $7 OFFSET $8`,
+		arg.Search, arg.DeviceGroup, arg.ProductModel, arg.Tag, arg.EligibilityState, arg.AbnormalOnly,
+		arg.Limit, arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]DeviceRegistry, 0, arg.Limit)
+	for rows.Next() {
+		item, err := scanDeviceRegistry(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (q *Queries) CountDeviceCatalogFiltered(ctx context.Context, arg ListDeviceCatalogFilter) (int64, error) {
+	row := q.db.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM t_device
+`+deviceCatalogWhereClause,
+		arg.Search, arg.DeviceGroup, arg.ProductModel, arg.Tag, arg.EligibilityState, arg.AbnormalOnly,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const deviceCatalogWhereClause = `
+WHERE ($1 = '' OR device_id ILIKE '%' || $1 || '%'
+         OR product_code ILIKE '%' || $1 || '%'
+         OR product_model ILIKE '%' || $1 || '%'
+         OR hardware_version ILIKE '%' || $1 || '%')
+  AND ($2 = '' OR device_group = $2)
+  AND ($3 = '' OR product_model = $3)
+  AND ($4 = '' OR tags::text ILIKE '%' || $4 || '%')
+  AND ($5 = '' OR eligibility_state = $5)
+  AND ($6 = false OR (
+        eligibility_state <> 'active'
+        OR COALESCE(jsonb_array_length(inconsistency_flags), 0) > 0
+      ))
+`
 
 func (q *Queries) InsertTaskTarget(ctx context.Context, taskID, deviceID string) error {
 	_, err := q.db.ExecContext(ctx, `

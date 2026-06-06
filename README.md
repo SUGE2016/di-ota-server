@@ -73,7 +73,9 @@
    - `POST /api/v1/packages/upload-url`
    - `POST /api/v1/packages/complete`
    - `POST /api/v1/packages`
-   - `GET /api/v1/devices`
+   - `GET /api/v1/devices`（支持 `search` / `group` / `product_model` / `tag` / `abnormal` 筛选与分页）
+   - `GET /api/v1/devices/:device_id`
+   - `GET /api/v1/devices/:device_id/upgrade-records`
    - `GET /api/v1/devices/csv-template`
    - `POST /api/v1/devices/import-csv`
    - `POST /api/v1/release-tasks`
@@ -85,7 +87,7 @@
    - `POST /device/v1/report-status`（支持幂等键；要求 `task_id`，支持 `source_version`、`target_version`、`error_code`）
 - 本地对象存储：MinIO（自动创建 bucket: `ota-packages`）
 - `sqlc` 查询定义与生成代码（`backend/queries/ota.sql`、`backend/internal/store`）
-- React 管理台骨架页面
+- React 管理台（包/任务/设备/用户可用；告警仍为 Mock，详见 [`doc/管理台缺口清单.md`](doc/管理台缺口清单.md)）
 - PostgreSQL 初始化脚本：`backend/migrations/001_init.sql`
 
 ## 安全密钥说明

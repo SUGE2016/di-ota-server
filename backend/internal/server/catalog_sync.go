@@ -215,15 +215,15 @@ func removeFlag(flags []string, code string) []string {
 	return out
 }
 
-func buildTaskSnapshot(ctx context.Context, q *store.Queries, task store.TReleaseTask) error {
+func buildTaskSnapshot(ctx context.Context, q *store.Queries, task store.TReleaseTask) (int, error) {
 	ids, err := q.ListDeviceIDsForTaskSnapshot(ctx, task.TargetGroup, task.ProductModel, task.HardwareVersion)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	for _, id := range ids {
 		if err := q.InsertTaskTarget(ctx, task.TaskID, id); err != nil {
-			return err
+			return 0, err
 		}
 	}
-	return nil
+	return len(ids), nil
 }

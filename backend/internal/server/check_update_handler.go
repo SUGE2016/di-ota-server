@@ -18,15 +18,19 @@ type checkUpdateRequest struct {
 	CurrentVersion  string `json:"current_version"`
 }
 
-func noUpgradeResponse(c *gin.Context, reason string, retryAfterSec int) {
+func noUpgradeResponse(c *gin.Context, reason string, retryAfterSec int, currentVersion string) {
+	data := gin.H{
+		"has_update":      false,
+		"reason":          reason,
+		"retry_after_sec": retryAfterSec,
+	}
+	if strings.TrimSpace(currentVersion) != "" {
+		data["current_version"] = strings.TrimSpace(currentVersion)
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"code":    2001,
 		"message": "No available upgrade",
-		"data": gin.H{
-			"has_update":      false,
-			"reason":          reason,
-			"retry_after_sec": retryAfterSec,
-		},
+		"data":    data,
 	})
 }
 
@@ -77,12 +81,7 @@ func handleCheckUpdate(c *gin.Context, cfg *config.Config, q *store.Queries) {
 		return
 	}
 
-	if req.CurrentVersion != "" {
-		_ = q.TouchDeviceLastSeen(c.Request.Context(), req.DeviceID, req.CurrentVersion)
-		dev.ReportedVersion = req.CurrentVersion
-	} else {
-		_ = q.TouchDeviceLastSeen(c.Request.Context(), req.DeviceID, "")
-	}
+	reported := policyReportedVersion(dev.ReportedVersion, dev.CatalogVersion, req.CurrentVersion)
 
 	tasks, err := q.ListRunningTasksForDevice(c.Request.Context(), req.DeviceID)
 	if err != nil {
@@ -90,11 +89,10 @@ func handleCheckUpdate(c *gin.Context, cfg *config.Config, q *store.Queries) {
 		return
 	}
 	if len(tasks) == 0 {
-		noUpgradeResponse(c, "no_running_task", 3600)
+		noUpgradeResponse(c, "no_running_task", 3600, reported)
 		return
 	}
 
-	reported := effectiveReportedVersion(dev.ReportedVersion, dev.CatalogVersion)
 	var matched *store.TReleaseTask
 	for i := range tasks {
 		candidate := tasks[i]
@@ -105,23 +103,23 @@ func handleCheckUpdate(c *gin.Context, cfg *config.Config, q *store.Queries) {
 		break
 	}
 	if matched == nil {
-		noUpgradeResponse(c, "not_in_canary", 1800)
+		noUpgradeResponse(c, "not_in_canary", 1800, reported)
 		return
 	}
 
 	pkg, err := q.GetPackageDetail(c.Request.Context(), matched.PackageID)
 	if err != nil {
-		noUpgradeResponse(c, "no_running_task", 3600)
+		noUpgradeResponse(c, "no_running_task", 3600, reported)
 		return
 	}
 
 	if reported != "" {
 		if versionAtLeast(reported, pkg.Version) {
-			noUpgradeResponse(c, "already_latest", 86400)
+			noUpgradeResponse(c, "already_latest", 86400, reported)
 			return
 		}
 		if pkg.MinUpgradableVersion != "" && CompareVersion(reported, pkg.MinUpgradableVersion) < 0 {
-			noUpgradeResponse(c, "version_not_eligible", 86400)
+			noUpgradeResponse(c, "version_not_eligible", 86400, reported)
 			return
 		}
 	}

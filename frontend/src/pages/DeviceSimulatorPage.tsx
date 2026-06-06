@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  Alert,
   Button,
   Card,
   Col,
@@ -15,6 +16,7 @@ import { Link } from 'react-router-dom';
 import {
   UPGRADE_STATUS_STEPS,
   checkUpdate,
+  describeNoUpdate,
   probeDownload,
   reportStatus,
   type DeviceConfig,
@@ -82,10 +84,13 @@ export function DeviceSimulatorPage() {
       const cfg = getConfig();
       const res = await checkUpdate(cfg);
       pushLog('check-update', res, true);
+      if (res.data?.current_version) {
+        form.setFieldValue('currentVersion', res.data.current_version);
+      }
       if (res.data?.has_update) {
         message.success(`发现升级 task_id=${res.data.task_id}`);
       } else {
-        message.info(res.data?.reason ? `无升级：${res.data.reason}` : '当前无可用升级');
+        message.warning(describeNoUpdate(res.data));
       }
       return res.data;
     } catch (e) {
@@ -106,13 +111,20 @@ export function DeviceSimulatorPage() {
       const check = await checkUpdate(cfg);
       pushLog('check-update', check, true);
 
+      if (check.data?.current_version) {
+        form.setFieldValue('currentVersion', check.data.current_version);
+      }
+
       if (!check.data?.has_update) {
-        message.info('无升级，流程结束');
+        const hint = describeNoUpdate(check.data);
+        pushLog('流程结束', { reason: check.data?.reason, current_version: check.data?.current_version, hint }, true);
+        message.warning(hint);
         return;
       }
 
       const taskId = check.data.task_id || '';
       const targetVersion = check.data.target_version || '';
+      const sourceVersion = check.data.current_version || cfg.currentVersion;
       if (!taskId) {
         throw new Error('响应缺少 task_id');
       }
@@ -128,10 +140,11 @@ export function DeviceSimulatorPage() {
 
       for (const status of UPGRADE_STATUS_STEPS) {
         await new Promise((r) => setTimeout(r, 300));
-        const rep = await reportStatus(cfg, { taskId, status, targetVersion });
+        const rep = await reportStatus(cfg, { taskId, status, targetVersion, sourceVersion });
         pushLog(`report-status (${status})`, rep, true);
       }
 
+      form.setFieldValue('currentVersion', targetVersion);
       message.success('升级流程模拟完成');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -157,6 +170,13 @@ export function DeviceSimulatorPage() {
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={10}>
           <Card title="设备参数" className="ota-card">
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message="重复联调说明"
+              description="升级成功后服务端会记住 reported_version，同一版本任务无法再次完整走通。需要再次演练时，请发布更高版本固件包并创建新的 Running 任务。"
+            />
             <Form
               form={form}
               layout="vertical"

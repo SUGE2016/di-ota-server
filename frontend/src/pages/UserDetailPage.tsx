@@ -152,12 +152,11 @@ export function UserDetailPage() {
           </div>
         </Card>
 
-        <Card className="ota-card ota-section-span-12" title="账号活动时间线">
+        <Card className="ota-card ota-section-span-12" title="账号活动">
           <Timeline
             items={[
-              { color: user?.last_login_at ? 'blue' : 'gray', children: user?.last_login_at ? `最近登录 ${new Date(user.last_login_at).toLocaleString()}` : '最近登录暂无记录' },
-              { color: user?.last_operation_at ? 'green' : 'gray', children: user?.last_operation_at ? `最近操作 ${new Date(user.last_operation_at).toLocaleString()}` : '最近操作暂无记录' },
-              { color: 'gray', children: '后续接入登录审计、角色变更记录、安全操作记录' },
+              { color: user?.last_login_at ? 'blue' : 'gray', children: user?.last_login_at ? `最近登录 ${new Date(user.last_login_at).toLocaleString()}` : '暂无登录记录' },
+              { color: user?.last_operation_at ? 'green' : 'gray', children: user?.last_operation_at ? `最近操作 ${new Date(user.last_operation_at).toLocaleString()}` : '暂无操作记录' },
             ]}
           />
         </Card>

@@ -4,6 +4,9 @@ services:
     container_name: ota-api
     working_dir: /app/backend
     command: sh -c "go mod download && go run ./cmd/api"
+    environment:
+      NO_PROXY: minio,localhost,127.0.0.1,postgres,redis,rabbitmq
+      no_proxy: minio,localhost,127.0.0.1,postgres,redis,rabbitmq
     env_file:
       - .env
     ports:
@@ -23,6 +26,9 @@ services:
     container_name: ota-worker
     working_dir: /app/backend
     command: sh -c "go mod download && go run ./cmd/worker"
+    environment:
+      NO_PROXY: minio,localhost,127.0.0.1,postgres,redis,rabbitmq
+      no_proxy: minio,localhost,127.0.0.1,postgres,redis,rabbitmq
     env_file:
       - .env
     volumes:

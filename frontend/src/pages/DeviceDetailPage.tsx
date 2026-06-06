@@ -1,19 +1,43 @@
-import { Breadcrumb, Button, Card, Descriptions, Space, Table, Tag, Timeline, Typography } from 'antd';
+import { useEffect, useState } from 'react';
+import { Alert, Breadcrumb, Button, Card, Descriptions, Space, Tag, Timeline, Typography, message } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockDevices } from './mockConsoleData';
+import { DeviceCatalogItem, UpgradeRecord, deviceAPI } from '../api';
 
-const { Paragraph, Title, Text } = Typography;
+const { Paragraph, Title } = Typography;
 
 const statusColor: Record<string, string> = {
-  online: 'green',
-  warning: 'orange',
-  offline: 'red',
+  Success: 'green',
+  Failed: 'red',
+  Downloading: 'blue',
+  Applying: 'blue',
+  Pending: 'default',
 };
 
 export function DeviceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const device = mockDevices.find((item) => item.device_id === id);
+  const [device, setDevice] = useState<DeviceCatalogItem | null>(null);
+  const [records, setRecords] = useState<UpgradeRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    Promise.all([
+      deviceAPI.get(id),
+      deviceAPI.upgradeRecords(id),
+    ])
+      .then(([dev, history]) => {
+        setDevice(dev);
+        setRecords(history.records);
+      })
+      .catch((e: Error) => message.error(e.message))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
+    return null;
+  }
 
   if (!device) {
     return (
@@ -28,97 +52,109 @@ export function DeviceDetailPage() {
     );
   }
 
-  const upgradeHistory = [
-    {
-      key: '1',
-      task_id: device.last_task_id,
-      from_version: device.current_version,
-      to_version: device.target_version,
-      result: device.status === 'warning' ? '异常' : '执行中',
-      reported_at: device.last_heartbeat,
-    },
-    {
-      key: '2',
-      task_id: 'task-0940',
-      from_version: '1.1.0',
-      to_version: device.current_version,
-      result: '成功',
-      reported_at: '2026-04-20 11:20:00',
-    },
-  ];
+  const tagEntries = device.tags && typeof device.tags === 'object'
+    ? Object.entries(device.tags as Record<string, unknown>)
+    : [];
+  const flags = device.inconsistency_flags ?? [];
 
   return (
     <div className="ota-page">
       <div>
         <Title level={3} className="ota-page-title">设备详情</Title>
-        <Paragraph className="ota-page-subtitle">先固定设备详情页的信息编排，后续再接升级历史、心跳详情和异常归因接口。</Paragraph>
+        <Paragraph className="ota-page-subtitle">设备注册表信息、目录冲突标记与 OTA 升级历史。</Paragraph>
       </div>
 
       <Breadcrumb
+        style={{ marginBottom: 16 }}
         items={[
           { title: <a onClick={() => navigate('/devices')}>设备管理</a> },
           { title: device.device_id },
         ]}
       />
 
-      <div className="ota-section-grid">
-        <Card className="ota-card ota-section-span-8" title="设备概览">
-          <Descriptions bordered column={{ xs: 1, sm: 2 }}>
-            <Descriptions.Item label="设备 ID">{device.device_id}</Descriptions.Item>
-            <Descriptions.Item label="状态"><Tag color={statusColor[device.status]}>{device.status}</Tag></Descriptions.Item>
-            <Descriptions.Item label="产品代码">{device.product_code}</Descriptions.Item>
-            <Descriptions.Item label="产品型号">{device.product_model}</Descriptions.Item>
-            <Descriptions.Item label="硬件版本">{device.hardware_version}</Descriptions.Item>
-            <Descriptions.Item label="数据来源">
-              <Tag color={device.data_source === 'external' ? 'purple' : 'blue'}>{device.data_source === 'external' ? '外部系统' : '本地系统'}</Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="当前版本">{device.current_version}</Descriptions.Item>
-            <Descriptions.Item label="目标版本">{device.target_version}</Descriptions.Item>
-            <Descriptions.Item label="最后心跳">{device.last_heartbeat}</Descriptions.Item>
-            <Descriptions.Item label="最近错误">{device.last_error_code}</Descriptions.Item>
-            <Descriptions.Item label="标签" span={2}>
-              <Space size={[8, 8]} wrap>
-                {device.tags.map((tag) => <span key={tag} className="ota-list-chip">{tag}</span>)}
-              </Space>
-            </Descriptions.Item>
-          </Descriptions>
-        </Card>
+      {(device.eligibility_state === 'blocked' || flags.length > 0) && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="设备存在异常标记"
+          description={
+            <Space direction="vertical" size={4}>
+              {device.eligibility_state === 'blocked' && <span>升级资格：已阻断（blocked）</span>}
+              {flags.length > 0 && (
+                <span>
+                  目录冲突：
+                  {flags.map((flag) => (
+                    <Tag key={flag} color="orange" style={{ marginInlineStart: 8 }}>{flag}</Tag>
+                  ))}
+                </span>
+              )}
+            </Space>
+          }
+        />
+      )}
 
-        <Card className="ota-card ota-section-span-4" title="运维动作占位">
-          <div className="ota-stack">
-            <Button type="primary">查看关联任务</Button>
-            <Button>加入观察名单</Button>
-            <Button danger={device.status === 'warning'}>标记异常已确认</Button>
-            <Text type="secondary">后续接入重试、诊断、任务回跳等动作。</Text>
-          </div>
-        </Card>
+      <Card className="ota-card" title="设备概览">
+        <Descriptions bordered column={{ xs: 1, sm: 2 }}>
+          <Descriptions.Item label="设备 ID">{device.device_id}</Descriptions.Item>
+          <Descriptions.Item label="状态">
+            <Tag color={device.eligibility_state === 'active' ? 'green' : 'red'}>{device.eligibility_state}</Tag>
+          </Descriptions.Item>
+          <Descriptions.Item label="产品代码">{device.product_code}</Descriptions.Item>
+          <Descriptions.Item label="产品型号">{device.product_model}</Descriptions.Item>
+          <Descriptions.Item label="硬件版本">{device.hardware_version}</Descriptions.Item>
+          <Descriptions.Item label="设备分组">{device.device_group}</Descriptions.Item>
+          <Descriptions.Item label="当前版本">{device.current_version || '-'}</Descriptions.Item>
+          <Descriptions.Item label="OTA 上报版本">{device.reported_version || '-'}</Descriptions.Item>
+          <Descriptions.Item label="目录版本">{device.catalog_version || '-'}</Descriptions.Item>
+          <Descriptions.Item label="目录来源">{device.catalog_source || '-'}</Descriptions.Item>
+          <Descriptions.Item label="最后心跳">
+            {device.last_heartbeat ? new Date(device.last_heartbeat).toLocaleString() : '-'}
+          </Descriptions.Item>
+          <Descriptions.Item label="注册时间">
+            {device.registered_at ? new Date(device.registered_at).toLocaleString() : '-'}
+          </Descriptions.Item>
+          <Descriptions.Item label="标签" span={2}>
+            <Space size={[8, 8]} wrap>
+              {tagEntries.length === 0 ? '-' : tagEntries.map(([k, v]) => (
+                <span key={k} className="ota-list-chip">{k}: {String(v)}</span>
+              ))}
+            </Space>
+          </Descriptions.Item>
+        </Descriptions>
+        <div style={{ marginTop: 16 }}>
+          <Button onClick={() => navigate('/devices')}>返回列表</Button>
+        </div>
+      </Card>
 
-        <Card className="ota-card ota-section-span-7" title="升级历史">
-          <Table
-            rowKey="key"
-            dataSource={upgradeHistory}
-            pagination={false}
-            scroll={upgradeHistory.length > 0 ? { x: 680 } : undefined}
-            columns={[
-              { title: '任务', dataIndex: 'task_id', key: 'task_id' },
-              { title: '起始版本', dataIndex: 'from_version', key: 'from_version' },
-              { title: '目标版本', dataIndex: 'to_version', key: 'to_version' },
-              { title: '结果', dataIndex: 'result', key: 'result' },
-              { title: '上报时间', dataIndex: 'reported_at', key: 'reported_at' },
-            ]}
-          />
-        </Card>
-
-        <Card className="ota-card ota-section-span-5" title="设备时间线">
+      <Card className="ota-card" title="升级历史" style={{ marginTop: 16 }}>
+        {records.length === 0 ? (
+          <Paragraph type="secondary">暂无升级记录（设备上报 report-status 后将出现在此）。</Paragraph>
+        ) : (
           <Timeline
-            items={[
-              { color: 'green', children: `最近心跳 ${device.last_heartbeat}` },
-              { color: device.status === 'offline' ? 'red' : 'blue', children: `当前状态 ${device.status}` },
-              { color: 'gray', children: '后续接入任务关联、错误详情、诊断记录' },
-            ]}
+            items={records.map((record) => ({
+              color: statusColor[record.status] ?? 'gray',
+              children: (
+                <Space direction="vertical" size={2}>
+                  <Space wrap>
+                    <Tag color={statusColor[record.status] ?? 'default'}>{record.status}</Tag>
+                    <span>{new Date(record.created_at).toLocaleString()}</span>
+                  </Space>
+                  <span>
+                    任务 <Button type="link" size="small" onClick={() => navigate(`/tasks/${record.task_id}`)}>{record.task_id}</Button>
+                  </span>
+                  {(record.source_version || record.target_version) && (
+                    <span>
+                      版本：{record.source_version || '-'} → {record.target_version || '-'}
+                    </span>
+                  )}
+                  {record.error_code && <Tag color="red">{record.error_code}</Tag>}
+                </Space>
+              ),
+            }))}
           />
-        </Card>
-      </div>
+        )}
+      </Card>
     </div>
   );
 }

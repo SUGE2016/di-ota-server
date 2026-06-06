@@ -182,23 +182,6 @@ export function UsersPage() {
         />
       </Card>
 
-      <div className="ota-section-grid">
-        <Card className="ota-card ota-section-span-6" title="待接后端能力">
-          <div className="ota-stack">
-            <Text>用户分页</Text>
-            <Text>批量操作</Text>
-            <Text>审计记录联动</Text>
-          </div>
-        </Card>
-        <Card className="ota-card ota-section-span-6" title="当前确认项">
-          <div className="ota-stack">
-            <Text>列表字段与筛选器已固定</Text>
-            <Text>认证来源和角色标签已单独显示</Text>
-            <Text>当前查询结果 {total} 条</Text>
-          </div>
-        </Card>
-      </div>
-
       <Modal
         title="新建用户"
         open={createOpen}

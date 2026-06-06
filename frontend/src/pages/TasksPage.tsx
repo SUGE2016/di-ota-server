@@ -44,7 +44,7 @@ export function TasksPage() {
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
-    deviceAPI.list(200, 0)
+    deviceAPI.list({ limit: 200, offset: 0 })
       .then((data) => setDevices(data.devices))
       .catch(() => setDevices([]));
   }, []);

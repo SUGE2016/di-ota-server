@@ -47,3 +47,19 @@
 - **Given** status=`unknown`
 - **When** POST report-status
 - **Then** HTTP 400，`invalid status`
+
+### API-08 check-update download_url
+
+- **Given** 有可用升级且 S3 PublicBaseURL 已配置
+- **When** POST check-update 返回 has_update=true
+- **Then** download_url 使用公网 host（见 CU-08）
+
+### API-09 管理端设备列表筛选
+
+- **When** GET `/api/v1/devices?group=&product_model=&tag=&abnormal=true`
+- **Then** 返回筛选结果与 total
+
+### API-10 管理端设备升级历史
+
+- **When** GET `/api/v1/devices/:device_id/upgrade-records`
+- **Then** 返回该设备 report-status 写入的记录列表

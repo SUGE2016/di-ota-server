@@ -24,8 +24,8 @@ func TestCatalogSync_AcceptDevice(t *testing.T) {
 	mock.ExpectQuery(`INSERT INTO t_device`).WillReturnRows(sqlmock.NewRows([]string{
 		"device_id", "device_group", "product_model", "hardware_version", "product_code", "tags",
 		"current_version", "reported_version", "catalog_version", "catalog_synced_at", "catalog_source",
-		"eligibility_state", "inconsistency_flags", "last_seen_at", "registered_at",
-	}).AddRow("AMS000001", "org-1001", "V9", "1.0", "AMS", []byte(`{}`), "v2.3.0", "", "v2.3.0", time.Now(), "backend", "active", []byte(`[]`), nil, time.Now()))
+		"eligibility_state", "inconsistency_flags", "last_seen_at", "registered_at", "last_heartbeat",
+	}).AddRow("AMS000001", "org-1001", "V9", "1.0", "AMS", []byte(`{}`), "v2.3.0", "", "v2.3.0", time.Now(), "backend", "active", []byte(`[]`), nil, time.Now(), time.Now()))
 	mock.ExpectExec(`INSERT INTO t_catalog_sync_batch`).WillReturnResult(sqlmock.NewResult(0, 1))
 
 	body := `{

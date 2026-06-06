@@ -19,8 +19,8 @@ func mockDeviceRegistry(mock sqlmock.Sqlmock, deviceID, group, model, hw, report
 		WillReturnRows(sqlmock.NewRows([]string{
 			"device_id", "device_group", "product_model", "hardware_version", "product_code", "tags",
 			"current_version", "reported_version", "catalog_version", "catalog_synced_at", "catalog_source",
-			"eligibility_state", "inconsistency_flags", "last_seen_at", "registered_at",
-		}).AddRow(deviceID, group, model, hw, "AMS", []byte(`{}`), reported, reported, catalog, now, "csv", "active", []byte(`[]`), now, now))
+			"eligibility_state", "inconsistency_flags", "last_seen_at", "registered_at", "last_heartbeat",
+		}).AddRow(deviceID, group, model, hw, "AMS", []byte(`{}`), reported, reported, catalog, now, "csv", "active", []byte(`[]`), now, now, now))
 }
 
 func TestDeviceCheckUpdate_AuthDisabled_NotInCatalog(t *testing.T) {
@@ -77,7 +77,6 @@ func TestDeviceCheckUpdate_NoRunningTask(t *testing.T) {
 	_, mock, r := newTestRouter(t, defaultTestConfig())
 
 	mockDeviceRegistry(mock, "AMS000001", "org-1001", "V9", "1.0", "v2.3.0", "v2.3.0")
-	mock.ExpectExec(`UPDATE t_device SET`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(`FROM t_release_task t`).WillReturnRows(sqlmock.NewRows([]string{
 		"task_id", "package_id", "target_group", "product_model", "hardware_version",
 		"failure_threshold", "state", "created_at", "canary_percent", "schedule_time", "force_upgrade",

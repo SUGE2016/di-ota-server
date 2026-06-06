@@ -34,3 +34,16 @@
 
 - **When** 任意 2001 响应
 - **Then** data.retry_after_sec > 0
+
+## CU-07 check-update 只读不写库
+
+- **Given** 库内 reported_version=v2.4.0
+- **When** 请求 current_version=v2.3.0（低于库内版本）
+- **Then** 决策仍用 v2.4.0，`reason=already_latest`
+- **And** 不产生 `UPDATE t_device`（不 TouchDeviceLastSeen / TouchDeviceReportedVersion）
+
+## CU-08 download_url 公网 host
+
+- **Given** S3 内网 endpoint=minio:9000，PublicBaseURL=localhost:9000
+- **When** has_update=true
+- **Then** data.download_url 不含 `minio:9000`，使用 PublicBaseURL

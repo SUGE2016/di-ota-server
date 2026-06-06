@@ -72,10 +72,37 @@ export interface DeviceCatalogItem {
   product_model: string;
   hardware_version: string;
   current_version: string;
+  reported_version?: string;
+  catalog_version?: string;
+  eligibility_state?: string;
+  catalog_source?: string;
   product_code: string;
-  last_heartbeat: string;
+  last_heartbeat?: string;
   tags: Record<string, unknown>;
+  inconsistency_flags?: string[];
   registered_at: string;
+}
+
+export interface UpgradeRecord {
+  id: number;
+  device_id: string;
+  task_id: string;
+  status: string;
+  source_version: string;
+  target_version: string;
+  error_code?: string;
+  created_at: string;
+}
+
+export interface DeviceListParams {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  group?: string;
+  product_model?: string;
+  tag?: string;
+  eligibility_state?: string;
+  abnormal?: boolean;
 }
 
 export interface DeviceCSVImportResult {
@@ -178,9 +205,25 @@ export const taskAPI = {
 };
 
 export const deviceAPI = {
-  list: (limit = 20, offset = 0) =>
+  list: (params: DeviceListParams = {}) =>
     wrap<{ devices: DeviceCatalogItem[]; total: number }>(
-      api.get('/devices', { params: { limit, offset } })
+      api.get('/devices', {
+        params: {
+          limit: params.limit ?? 20,
+          offset: params.offset ?? 0,
+          search: params.search ?? '',
+          group: params.group ?? '',
+          product_model: params.product_model ?? '',
+          tag: params.tag ?? '',
+          eligibility_state: params.eligibility_state ?? '',
+          abnormal: params.abnormal ? 'true' : '',
+        },
+      })
+    ),
+  get: (id: string) => wrap<DeviceCatalogItem>(api.get(`/devices/${id}`)),
+  upgradeRecords: (id: string, limit = 50) =>
+    wrap<{ records: UpgradeRecord[] }>(
+      api.get(`/devices/${id}/upgrade-records`, { params: { limit } })
     ),
   importCSV: (file: File) => {
     const form = new FormData();

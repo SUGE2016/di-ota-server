@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Input, Select, Space, Table, Tag, Typography, Upload, message } from 'antd';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Button, Card, Input, Select, Space, Switch, Table, Tag, Typography, Upload, message } from 'antd';
 import { DownloadOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { DeviceCatalogItem, deviceAPI } from '../api';
@@ -9,24 +9,55 @@ const { Paragraph, Title, Text } = Typography;
 export function DevicesPage() {
   const navigate = useNavigate();
   const [devices, setDevices] = useState<DeviceCatalogItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
+  const [appliedKeyword, setAppliedKeyword] = useState('');
   const [groupFilter, setGroupFilter] = useState<string | undefined>(undefined);
+  const [modelFilter, setModelFilter] = useState<string | undefined>(undefined);
+  const [tagFilter, setTagFilter] = useState('');
+  const [appliedTagFilter, setAppliedTagFilter] = useState('');
+  const [abnormalOnly, setAbnormalOnly] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [filterOptions, setFilterOptions] = useState<{ groups: string[]; models: string[] }>({ groups: [], models: [] });
 
-  const load = async () => {
+  const loadFilterOptions = useCallback(async () => {
+    try {
+      const data = await deviceAPI.list({ limit: 200, offset: 0 });
+      setFilterOptions({
+        groups: Array.from(new Set(data.devices.map((d) => d.device_group).filter(Boolean))),
+        models: Array.from(new Set(data.devices.map((d) => d.product_model).filter(Boolean))),
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await deviceAPI.list(200, 0);
+      const data = await deviceAPI.list({
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+        search: appliedKeyword.trim(),
+        group: groupFilter,
+        product_model: modelFilter,
+        tag: appliedTagFilter.trim(),
+        abnormal: abnormalOnly,
+      });
       setDevices(data.devices);
-    } catch (e: any) {
-      message.error(e.message);
+      setTotal(data.total);
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : '加载设备失败');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, appliedKeyword, groupFilter, modelFilter, appliedTagFilter, abnormalOnly]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void loadFilterOptions(); }, [loadFilterOptions]);
+  useEffect(() => { void load(); }, [load]);
 
   const handleDownloadTemplate = async () => {
     try {
@@ -37,8 +68,8 @@ export function DevicesPage() {
       link.download = 'ota-device-template.csv';
       link.click();
       URL.revokeObjectURL(url);
-    } catch (e: any) {
-      message.error(e.message);
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : '下载模板失败');
     }
   };
 
@@ -47,12 +78,20 @@ export function DevicesPage() {
     try {
       const result = await deviceAPI.importCSV(file);
       message.success(`导入成功：${result.imported_count} 台设备`);
-      load();
-    } catch (e: any) {
-      message.error(e.message);
+      setPage(1);
+      await loadFilterOptions();
+      await load();
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : '导入失败');
     } finally {
       setImporting(false);
     }
+  };
+
+  const applyFilters = () => {
+    setAppliedKeyword(keyword);
+    setAppliedTagFilter(tagFilter);
+    setPage(1);
   };
 
   const columns = [
@@ -62,6 +101,21 @@ export function DevicesPage() {
     { title: '硬件版本', dataIndex: 'hardware_version', key: 'hardware_version' },
     { title: '设备分组', dataIndex: 'device_group', key: 'device_group', render: (value: string) => <Tag color="blue">{value}</Tag> },
     { title: '当前版本', dataIndex: 'current_version', key: 'current_version' },
+    { title: 'OTA 上报', dataIndex: 'reported_version', key: 'reported_version', render: (v: string) => v || '-' },
+    {
+      title: '状态',
+      key: 'status',
+      render: (_: unknown, record: DeviceCatalogItem) => {
+        const flags = record.inconsistency_flags ?? [];
+        if (record.eligibility_state === 'blocked') {
+          return <Tag color="red">已阻断</Tag>;
+        }
+        if (flags.length > 0) {
+          return <Tag color="orange">目录异常</Tag>;
+        }
+        return <Tag color="green">正常</Tag>;
+      },
+    },
     { title: '导入/更新时间', dataIndex: 'last_heartbeat', key: 'last_heartbeat', render: (value: string) => value ? new Date(value).toLocaleString() : '-' },
     {
       title: '操作',
@@ -75,19 +129,6 @@ export function DevicesPage() {
     },
   ];
 
-  const groupOptions = Array.from(new Set(devices.map((d) => d.device_group).filter(Boolean)))
-    .map((group) => ({ label: group, value: group }));
-
-  const filteredDevices = devices.filter((device) => {
-    if (groupFilter && device.device_group !== groupFilter) return false;
-    if (!keyword.trim()) return true;
-    const key = keyword.toLowerCase();
-    return [device.device_id, device.product_code, device.product_model, device.hardware_version, device.current_version, device.device_group]
-      .join(' ')
-      .toLowerCase()
-      .includes(key);
-  });
-
   return (
     <div className="ota-page">
       <div>
@@ -99,7 +140,7 @@ export function DevicesPage() {
         type="info"
         showIcon
         message="设备目录来自 CSV"
-        description="此处只保存 OTA 选型与分组需要的最小字段，不同步主系统隐私或业务数据。"
+        description="只保存 OTA 选型与分组需要的最小字段。开启「异常设备」可筛选已阻断或目录冲突的设备；点击详情可查看升级历史。"
       />
 
       <Card className="ota-card">
@@ -109,22 +150,43 @@ export function DevicesPage() {
               className="ota-toolbar-control-search"
               placeholder="搜索设备 ID / 型号 / 产品代码"
               allowClear
-              onSearch={setKeyword}
+              value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
+              onSearch={applyFilters}
             />
             <Select
               className="ota-toolbar-control-select"
               allowClear
               placeholder="设备分组"
               value={groupFilter}
-              options={groupOptions}
-              onChange={(value) => setGroupFilter(value)}
+              options={filterOptions.groups.map((group) => ({ label: group, value: group }))}
+              onChange={(value) => { setGroupFilter(value); setPage(1); }}
             />
+            <Select
+              className="ota-toolbar-control-select"
+              allowClear
+              placeholder="产品型号"
+              value={modelFilter}
+              options={filterOptions.models.map((model) => ({ label: model, value: model }))}
+              onChange={(value) => { setModelFilter(value); setPage(1); }}
+            />
+            <Input
+              className="ota-toolbar-control-select"
+              placeholder="标签关键词"
+              allowClear
+              value={tagFilter}
+              onChange={(e) => setTagFilter(e.target.value)}
+              onPressEnter={applyFilters}
+            />
+            <Space size={4}>
+              <Text type="secondary">异常设备</Text>
+              <Switch checked={abnormalOnly} onChange={(checked) => { setAbnormalOnly(checked); setPage(1); }} />
+            </Space>
           </div>
           <Space>
-            <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
-            <Button icon={<DownloadOutlined />} onClick={handleDownloadTemplate}>模板</Button>
-            <Upload accept=".csv,text/csv" showUploadList={false} beforeUpload={(file) => { handleImport(file); return false; }}>
+            <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
+            <Button icon={<DownloadOutlined />} onClick={() => void handleDownloadTemplate()}>模板</Button>
+            <Upload accept=".csv,text/csv" showUploadList={false} beforeUpload={(file) => { void handleImport(file); return false; }}>
               <Button type="primary" icon={<UploadOutlined />} loading={importing}>导入 CSV</Button>
             </Upload>
           </Space>
@@ -133,30 +195,18 @@ export function DevicesPage() {
         <Table
           rowKey="device_id"
           columns={columns}
-          dataSource={filteredDevices}
+          dataSource={devices}
           loading={loading}
-          pagination={{ pageSize: 10, showSizeChanger: false }}
-          scroll={filteredDevices.length > 0 ? { x: 1200 } : undefined}
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            showSizeChanger: false,
+            onChange: (next) => setPage(next),
+          }}
+          scroll={devices.length > 0 ? { x: 1300 } : undefined}
         />
       </Card>
-
-      <div className="ota-section-grid">
-        <Card className="ota-card ota-section-span-8" title="设备视角需要继续补的区域">
-          <div className="ota-stack">
-            <Text>设备详情页接入真实升级历史</Text>
-            <Text>升级历史时间线</Text>
-            <Text>异常设备快速过滤</Text>
-            <Text>按产品型号 / 标签 / 分组的组合查询</Text>
-          </div>
-        </Card>
-        <Card className="ota-card ota-section-span-4" title="当前页面重点">
-          <div className="ota-stack">
-            <Text>CSV 导入设备影子目录</Text>
-            <Text>按分组筛选发布范围</Text>
-            <Text>避免依赖主系统在线接口</Text>
-          </div>
-        </Card>
-      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Avatar, Button, Typography, Space, Tag } from 'antd';
 import { DashboardOutlined, BoxPlotOutlined, ThunderboltOutlined, LogoutOutlined, UserOutlined, TeamOutlined, LaptopOutlined, AlertOutlined } from '@ant-design/icons';
 import useAuthStore from '../stores/authStore';
+import { APP_VERSION_LABEL, COPYRIGHT_HOLDER } from '../constants/version';
 
 const { Sider, Header, Content } = Layout;
 const { Text } = Typography;
@@ -20,7 +21,6 @@ export function MainLayout() {
   const username = useAuthStore((s) => s.username);
   const roles = useAuthStore((s) => s.roles);
   const authSource = useAuthStore((s) => s.authSource);
-  const hasExternalAccess = useAuthStore((s) => s.hasExternalAccess);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -31,7 +31,7 @@ export function MainLayout() {
 
   return (
     <Layout className="ota-shell" style={{ minHeight: '100vh' }}>
-      <Sider theme="light" width={230} collapsedWidth={0} breakpoint="lg">
+      <Sider theme="light" width={230} collapsedWidth={0} breakpoint="lg" className="ota-shell-sider">
         <div className="ota-brand">OTA 管理台</div>
         <Menu
           mode="inline"
@@ -40,6 +40,10 @@ export function MainLayout() {
           onClick={({ key }) => navigate(key)}
           style={{ borderInlineEnd: 0, padding: '8px 10px' }}
         />
+        <div className="ota-shell-meta">
+          <span>© {COPYRIGHT_HOLDER}</span>
+          <span>{APP_VERSION_LABEL}</span>
+        </div>
       </Sider>
       <Layout>
         <Header className="ota-header" style={{ padding: '0 20px', borderBottom: '1px solid #e7ecf3' }}>
@@ -52,7 +56,6 @@ export function MainLayout() {
           <Space size={12} className="ota-header-actions" wrap>
             <Space size={[8, 8]} wrap>
               <Tag color={authSource === 'sso' ? 'cyan' : 'default'}>{authSource === 'sso' ? 'SSO 登录' : '本地登录'}</Tag>
-              <Tag color={hasExternalAccess ? 'green' : 'gold'}>{hasExternalAccess ? '外部授权已连接' : '外部授权未接入'}</Tag>
               <Text type="secondary">{roles.join(' / ')}</Text>
             </Space>
             <Avatar icon={<UserOutlined />} />

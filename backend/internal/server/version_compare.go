@@ -75,3 +75,18 @@ func effectiveReportedVersion(reported, catalog string) string {
 	}
 	return strings.TrimSpace(catalog)
 }
+
+func policyReportedVersion(storedReported, catalog, requestCurrent string) string {
+	reported := effectiveReportedVersion(storedReported, catalog)
+	requestCurrent = strings.TrimSpace(requestCurrent)
+	if requestCurrent == "" {
+		return reported
+	}
+	if reported == "" {
+		return requestCurrent
+	}
+	if CompareVersion(requestCurrent, reported) > 0 {
+		return requestCurrent
+	}
+	return reported
+}
