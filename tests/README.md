@@ -33,6 +33,9 @@ cd backend && go test ./tests/integration/...
 
 # E2E 占位（需 docker compose）
 cd backend && go test -tags=e2e ./tests/integration/ -run TestE2E -v
+
+# 指定 API 地址（默认 http://localhost:8080）
+OTA_E2E_BASE_URL=http://localhost:8080 go test -tags=e2e ./tests/integration/ -v
 ```
 
 ## 覆盖矩阵
@@ -43,7 +46,8 @@ cd backend && go test -tags=e2e ./tests/integration/ -run TestE2E -v
 | 设备管理 | specs/device_management.md | device_handlers.go | device_management_test.go |
 | 设备 API | specs/device_api.md | internal/server/router_state_test.go, s3_presign_test.go | device_auth_test.go, check_update_v2_test.go |
 | 升级状态机 | specs/upgrade_state_machine.md | upgrade_status_test.go, canary_test.go | device_report_status_test.go, report_status_v2_test.go |
-| 发布全链路 | specs/release_task_flow.md | — | e2e_flow_test.go（占位） |
+| 发布全链路 | specs/release_task_flow.md | download_auth_test.go | e2e_flow_test.go（E2E-01～05） |
+| 告警中心 | — | — | alert_api_test.go |
 | 任务快照 | specs/task_snapshot.md | catalog_sync_test.go | task_snapshot_test.go |
 | B→O 目录同步 | specs/integration_catalog.md | catalog_sync_test.go | catalog_sync_test.go |
 | 待升级 hint | specs/integration_hint.md | — | 待 P2 实现 |

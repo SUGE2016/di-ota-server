@@ -23,6 +23,7 @@ type Config struct {
 
 type APIConfig struct {
 	Port               string
+	PublicBaseURL      string
 	AutoMigrateOnStart bool
 }
 
@@ -58,13 +59,14 @@ type S3Config struct {
 }
 
 type AuthConfig struct {
-	JWTSecret           string
-	DeviceSigningSecret string
-	DeviceAPIAuthEnabled bool
-	DeviceAPIToken       string
-	LocalAuthEnabled    bool
-	LocalAdminUsername  string
-	LocalAdminPassHash  string
+	JWTSecret                string
+	DeviceSigningSecret      string
+	DeviceAPIAuthEnabled     bool
+	DeviceAPIToken           string
+	DeviceDownloadHMACEnabled bool
+	LocalAuthEnabled         bool
+	LocalAdminUsername       string
+	LocalAdminPassHash       string
 }
 
 type OIDCConfig struct {
@@ -84,8 +86,11 @@ type OIDCConfig struct {
 }
 
 type IntegrationConfig struct {
-	Enabled      bool
-	ServiceToken string
+	Enabled        bool
+	ServiceToken   string
+	WebhookEnabled bool
+	WebhookURL     string
+	WebhookSecret  string
 }
 
 func Load() (*Config, error) {
@@ -94,6 +99,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		API: APIConfig{
 			Port:               getEnv("API_PORT", "8080"),
+			PublicBaseURL:      getEnv("API_PUBLIC_BASE_URL", "http://localhost:8080"),
 			AutoMigrateOnStart: getEnv("API_AUTO_MIGRATE_ON_START", "false") == "true",
 		},
 		Worker: WorkerConfig{
@@ -121,13 +127,14 @@ func Load() (*Config, error) {
 			SignedURLTTLSec: getEnvInt64("S3_SIGNED_URL_TTL_SEC", 600),
 		},
 		Auth: AuthConfig{
-			JWTSecret:           getEnv("JWT_SECRET", "change-me-jwt-secret"),
-			DeviceSigningSecret: getEnv("DEVICE_SIGNING_SECRET", "change-me-device-secret"),
-			DeviceAPIAuthEnabled: getEnv("DEVICE_API_AUTH_ENABLED", "false") == "true",
-			DeviceAPIToken:       getEnv("DEVICE_API_TOKEN", ""),
-			LocalAuthEnabled:    getEnv("LOCAL_AUTH_ENABLED", "false") == "true",
-			LocalAdminUsername:  getEnv("LOCAL_ADMIN_USERNAME", "admin"),
-			LocalAdminPassHash:  getEnv("LOCAL_ADMIN_PASSWORD_HASH", ""),
+			JWTSecret:                 getEnv("JWT_SECRET", "change-me-jwt-secret"),
+			DeviceSigningSecret:       getEnv("DEVICE_SIGNING_SECRET", "change-me-device-secret"),
+			DeviceAPIAuthEnabled:      getEnv("DEVICE_API_AUTH_ENABLED", "false") == "true",
+			DeviceAPIToken:            getEnv("DEVICE_API_TOKEN", ""),
+			DeviceDownloadHMACEnabled: getEnv("DEVICE_DOWNLOAD_HMAC_ENABLED", "false") == "true",
+			LocalAuthEnabled:          getEnv("LOCAL_AUTH_ENABLED", "false") == "true",
+			LocalAdminUsername:        getEnv("LOCAL_ADMIN_USERNAME", "admin"),
+			LocalAdminPassHash:        getEnv("LOCAL_ADMIN_PASSWORD_HASH", ""),
 		},
 		OIDC: OIDCConfig{
 			Enabled:         getEnv("OIDC_ENABLED", "false") == "true",
@@ -145,8 +152,11 @@ func Load() (*Config, error) {
 			MockUser:        getEnv("OIDC_MOCK_USER", "oidc-user"),
 		},
 		Integration: IntegrationConfig{
-			Enabled:      getEnv("INTEGRATION_ENABLED", "false") == "true",
-			ServiceToken: getEnv("INTEGRATION_SERVICE_TOKEN", ""),
+			Enabled:        getEnv("INTEGRATION_ENABLED", "false") == "true",
+			ServiceToken:   getEnv("INTEGRATION_SERVICE_TOKEN", ""),
+			WebhookEnabled: getEnv("INTEGRATION_WEBHOOK_ENABLED", "false") == "true",
+			WebhookURL:     getEnv("INTEGRATION_WEBHOOK_URL", ""),
+			WebhookSecret:  getEnv("INTEGRATION_WEBHOOK_SECRET", ""),
 		},
 	}
 

@@ -8,6 +8,8 @@ import (
 
 	"ota-server/backend/internal/config"
 	"ota-server/backend/internal/db"
+	"ota-server/backend/internal/server"
+	"ota-server/backend/internal/store"
 )
 
 func main() {
@@ -22,23 +24,24 @@ func main() {
 	}
 	defer pg.Close()
 
+	q := store.New(pg)
 	log.Printf("ota-worker started, rabbitmq=%s postgres=%s", cfg.RabbitMQ.URL, cfg.Postgres.Host)
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	if err := runWorkerCycle(pg, cfg.Worker.TaskStatsRetentionHours); err != nil {
+	if err := runWorkerCycle(pg, q, cfg); err != nil {
 		log.Printf("worker cycle failed: %v", err)
 	}
 
 	for {
 		<-ticker.C
-		if err := runWorkerCycle(pg, cfg.Worker.TaskStatsRetentionHours); err != nil {
+		if err := runWorkerCycle(pg, q, cfg); err != nil {
 			log.Printf("worker cycle failed: %v", err)
 		}
 	}
 }
 
-func runWorkerCycle(pg *sql.DB, statsRetentionHours int64) error {
+func runWorkerCycle(pg *sql.DB, q *store.Queries, cfg *config.Config) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -60,7 +63,7 @@ GROUP BY ur.task_id
 		return err
 	}
 
-	res, err := pg.ExecContext(ctx, `
+	rows, err := pg.QueryContext(ctx, `
 UPDATE t_release_task t
 SET state = 'Paused'
 FROM (
@@ -75,24 +78,42 @@ FROM (
 WHERE t.task_id = s.task_id
   AND t.state = 'Running'
   AND s.failure_rate > t.failure_threshold
+RETURNING t.task_id, t.failure_threshold, s.failure_rate
 `)
 	if err != nil {
 		return err
 	}
+	defer rows.Close()
+
+	paused := 0
+	for rows.Next() {
+		var taskID string
+		var threshold, failureRate float64
+		if err := rows.Scan(&taskID, &threshold, &failureRate); err != nil {
+			return err
+		}
+		paused++
+		if err := server.UpsertTaskFailureAlert(ctx, q, taskID, failureRate, threshold); err != nil {
+			log.Printf("create failure alert for %s: %v", taskID, err)
+		}
+		server.EmitTaskPausedWebhookAsync(cfg, taskID, "failure_rate_exceeded", failureRate, threshold)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
 
 	deleted := int64(0)
-	if statsRetentionHours > 0 {
+	if cfg.Worker.TaskStatsRetentionHours > 0 {
 		cleanupRes, err := pg.ExecContext(ctx, `
 DELETE FROM t_task_stats
 WHERE snapshot_time < NOW() - make_interval(hours => $1)
-`, statsRetentionHours)
+`, cfg.Worker.TaskStatsRetentionHours)
 		if err != nil {
 			return err
 		}
 		deleted, _ = cleanupRes.RowsAffected()
 	}
 
-	affected, _ := res.RowsAffected()
-	log.Printf("worker heartbeat: stats snapshot done, auto-pause affected=%d, cleaned_stats=%d", affected, deleted)
+	log.Printf("worker heartbeat: stats snapshot done, auto-pause affected=%d, cleaned_stats=%d", paused, deleted)
 	return nil
 }

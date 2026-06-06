@@ -13,6 +13,12 @@ const statusColor: Record<string, string> = {
   Pending: 'default',
 };
 
+const FLAG_LABELS: Record<string, string> = {
+  version_rollback_ignored: '目录同步版本低于 OTA 上报，已忽略回退',
+  version_ahead_of_device: '目录版本高于设备 OTA 上报',
+  identity_changed: '产品型号或硬件版本与历史记录不一致',
+};
+
 export function DeviceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -92,6 +98,28 @@ export function DeviceDetailPage() {
             </Space>
           }
         />
+      )}
+
+      {(flags.length > 0 || device.catalog_version || device.reported_version) && (
+        <Card className="ota-card" title="目录与 OTA 版本对比" style={{ marginBottom: 16 }}>
+          <Descriptions bordered column={{ xs: 1, sm: 3 }} size="small">
+            <Descriptions.Item label="目录版本 (catalog)">{device.catalog_version || '-'}</Descriptions.Item>
+            <Descriptions.Item label="OTA 上报 (reported)">{device.reported_version || '-'}</Descriptions.Item>
+            <Descriptions.Item label="决策用当前版本">{device.current_version || '-'}</Descriptions.Item>
+          </Descriptions>
+          {flags.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <Space direction="vertical" size={4}>
+                {flags.map((flag) => (
+                  <span key={flag}>
+                    <Tag color="orange">{flag}</Tag>
+                    <Typography.Text type="secondary">{FLAG_LABELS[flag] ?? '目录同步冲突标记'}</Typography.Text>
+                  </span>
+                ))}
+              </Space>
+            </div>
+          )}
+        </Card>
       )}
 
       <Card className="ota-card" title="设备概览">

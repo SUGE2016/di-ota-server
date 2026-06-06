@@ -125,7 +125,7 @@ func handleCheckUpdate(c *gin.Context, cfg *config.Config, q *store.Queries) {
 	}
 
 	threshold, _ := strconv.ParseFloat(matched.FailureThreshold, 64)
-	downloadURL := buildSignedDownloadURL(cfg, pkg.PackageID)
+	downloadURL := buildCheckUpdateDownloadURL(cfg, pkg.PackageID)
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
 		"message": "ok",

@@ -18,13 +18,15 @@ export function UsersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [createAuthSource, setCreateAuthSource] = useState<'local' | 'sso'>('local');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
 
   const load = async () => {
     setLoading(true);
     try {
       const data = await userAPI.list({
-        limit: 20,
-        offset: 0,
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
         search,
         status: status === 'all' ? '' : status,
         role: role === 'all' ? '' : role,
@@ -40,7 +42,7 @@ export function UsersPage() {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [page, search, status, role]);
 
   const openCreateModal = () => {
     form.setFieldsValue({
@@ -140,11 +142,11 @@ export function UsersPage() {
       <Card className="ota-card">
         <div className="ota-toolbar">
           <div className="ota-toolbar-left">
-            <Input.Search className="ota-toolbar-control-search" placeholder="搜索用户名 / 显示名" allowClear value={search} onChange={(e) => setSearch(e.target.value)} onSearch={() => void load()} />
+            <Input.Search className="ota-toolbar-control-search" placeholder="搜索用户名 / 显示名" allowClear value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} onSearch={() => void load()} />
             <Select
               className="ota-toolbar-control-select"
               value={role}
-              onChange={setRole}
+              onChange={(v) => { setRole(v); setPage(1); }}
               options={[
                 { label: '全部角色', value: 'all' },
                 { label: '管理员', value: 'admin' },
@@ -156,7 +158,7 @@ export function UsersPage() {
             <Select
               className="ota-toolbar-control-select"
               value={status}
-              onChange={setStatus}
+              onChange={(v) => { setStatus(v); setPage(1); }}
               options={[
                 { label: '全部状态', value: 'all' },
                 { label: '启用', value: 'enabled' },
@@ -176,7 +178,7 @@ export function UsersPage() {
           columns={columns}
           loading={loading}
           dataSource={users}
-          pagination={{ pageSize: 10, showSizeChanger: false }}
+          pagination={{ current: page, pageSize, total, showSizeChanger: false, onChange: setPage }}
           locale={{ emptyText: '当前没有匹配的用户数据。' }}
           scroll={users.length > 0 ? { x: 1080 } : undefined}
         />

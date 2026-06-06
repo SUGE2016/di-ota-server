@@ -37,4 +37,4 @@
 1. Worker 统计失败率超阈值
 2. 任务自动 Paused
 
-> 当前 `integration/e2e_flow_test.go` 为占位，需 `docker compose up` 后取消 skip 运行。
+> 运行 `go test -tags=e2e ./tests/integration/` 前需 `docker compose up`；栈不可达时自动 skip。

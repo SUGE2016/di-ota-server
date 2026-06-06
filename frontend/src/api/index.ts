@@ -235,6 +235,35 @@ export const deviceAPI = {
   downloadTemplate: () => api.get('/devices/csv-template', { responseType: 'blob' }),
 };
 
+export interface AlertItem {
+  alert_id: string;
+  alert_type: string;
+  severity: string;
+  status: string;
+  resource_type: string;
+  resource_id: string;
+  message: string;
+  detail?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export const alertAPI = {
+  list: (params?: { limit?: number; offset?: number; status?: string; severity?: string }) =>
+    wrap<{ alerts: AlertItem[]; total: number }>(
+      api.get('/alerts', {
+        params: {
+          limit: params?.limit ?? 20,
+          offset: params?.offset ?? 0,
+          status: params?.status ?? '',
+          severity: params?.severity ?? '',
+        },
+      })
+    ),
+  batchAction: (action: 'acknowledge' | 'close', alertIds: string[]) =>
+    wrap<{ updated: number }>(api.post('/alerts/actions', { action, alert_ids: alertIds })),
+};
+
 export const dashboardAPI = {
   overview: () => {
     return Promise.all([

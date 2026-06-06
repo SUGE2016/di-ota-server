@@ -1086,6 +1086,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": mapAuditLogs(logs)})
 		})
 
+		registerAlertRoutes(api, q)
 		registerIntegrationRoutes(api, cfg, q)
 	}
 
@@ -1105,6 +1106,13 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 				}
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query package failed"})
 				return
+			}
+
+			if cfg.Auth.DeviceDownloadHMACEnabled {
+				if err := verifyPackageDownloadSignature(cfg, packageID, c.Query("expires"), c.Query("signature")); err != nil {
+					c.JSON(http.StatusForbidden, gin.H{"code": 1003, "message": err.Error()})
+					return
+				}
 			}
 
 			c.Redirect(http.StatusFound, buildSignedDownloadURL(cfg, packageID))
@@ -1187,6 +1195,11 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 
 			if normalizedStatus == "Success" {
 				ensureDeviceReportedVersion(c.Request.Context(), q, req.DeviceID, req.TargetVersion)
+			}
+
+			if normalizedStatus == "Success" || normalizedStatus == "Failed" {
+				logAlertError(UpsertUpgradeStatusAlert(c.Request.Context(), q, req.DeviceID, req.TaskID, normalizedStatus, strings.TrimSpace(req.TargetVersion)))
+				EmitUpgradeWebhookAsync(cfg, req.DeviceID, req.TaskID, normalizedStatus, strings.TrimSpace(req.SourceVersion), strings.TrimSpace(req.TargetVersion))
 			}
 
 			respData := gin.H{
