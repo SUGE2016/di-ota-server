@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { AutoComplete, Button, Card, DatePicker, Form, Input, InputNumber, Switch, Select, Space, message, Modal, Table, Tag, Typography } from 'antd';
+import { AutoComplete, Button, Card, DatePicker, Form, Input, InputNumber, Switch, Select, message, Modal, Space, Table, Tag } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { DeviceCatalogItem, ReleaseTask, deviceAPI, taskAPI } from '../api';
-import { tableActionColumn, listTableProps, listTableScroll } from '../utils/tableActionColumn';
-
-const { Paragraph, Title } = Typography;
+import { tableActionColumn, listTableProps, listTableScroll, clientTablePagination } from '../utils/tableActionColumn';
+import { tableIdLinkColumn } from '../utils/tableIdLinkColumn';
+import { tableEllipsisColumn, tableEllipsisRenderColumn, tableCompactColumn } from '../utils/tableEllipsisColumn';
 
 const stateColor: Record<string, string> = {
   Running: 'blue',
@@ -92,12 +92,15 @@ export function TasksPage() {
   };
 
   const columns = [
-    { title: '任务 ID', dataIndex: 'task_id', key: 'task_id', width: 220, render: (v: string) => <a onClick={() => navigate(`/tasks/${v}`)}>{v}</a> },
-    { title: '产品', key: 'product', render: (_: unknown, r: ReleaseTask) => `${r.product_code ?? '-'} v${r.version ?? '-'}` },
-    { title: '分组', dataIndex: 'target_group', key: 'target_group' },
-    { title: '型号', dataIndex: 'product_model', key: 'product_model' },
-    { title: '状态', dataIndex: 'state', key: 'state', render: (v: string) => <Tag color={stateColor[v]}>{v}</Tag> },
-    { title: '创建时间', dataIndex: 'created_at', key: 'created_at', render: (v: string) => new Date(v).toLocaleString() },
+    tableIdLinkColumn<ReleaseTask>('任务 ID', 'task_id', (id) => navigate(`/tasks/${id}`)),
+    tableEllipsisRenderColumn<ReleaseTask>('产品', 'product', (r) => `${r.product_code ?? '-'} v${r.version ?? '-'}`),
+    tableEllipsisColumn<ReleaseTask>('分组', 'target_group'),
+    tableEllipsisColumn<ReleaseTask>('型号', 'product_model'),
+    tableCompactColumn<ReleaseTask>('状态', 'state', (v: string) => <Tag color={stateColor[v]}>{v}</Tag>, 'state'),
+    tableEllipsisColumn<ReleaseTask>('创建时间', 'created_at', {
+      size: 'date',
+      render: (v) => (v ? new Date(String(v)).toLocaleString() : '-'),
+    }),
     tableActionColumn<ReleaseTask>(
       (_, r) => {
         const actions = validActions[r.state] || [];
@@ -134,11 +137,6 @@ export function TasksPage() {
 
   return (
     <div className="ota-page">
-      <div>
-        <Title level={3} className="ota-page-title">发布任务</Title>
-        <Paragraph className="ota-page-subtitle">配置灰度策略与执行窗口，实时控制任务流转。</Paragraph>
-      </div>
-
       <Card
         className="ota-card"
         extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>新建任务</Button>}
@@ -177,8 +175,8 @@ export function TasksPage() {
           dataSource={filteredTasks}
           loading={loading}
           rowKey="task_id"
-          pagination={{ pageSize: 12 }}
-          scroll={listTableScroll(900, filteredTasks.length)}
+          pagination={clientTablePagination(12)}
+          scroll={listTableScroll(columns, filteredTasks.length)}
         />
 
         <Modal width="min(560px, calc(100vw - 24px))" title="新建发布任务" open={createOpen} onCancel={() => { setCreateOpen(false); form.resetFields(); }} footer={null}>

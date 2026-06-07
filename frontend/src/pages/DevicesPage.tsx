@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Button, Card, Input, Select, Space, Switch, Table, Tag, Typography, Upload, message } from 'antd';
-import { DownloadOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
+import { Button, Card, Input, Select, Space, Switch, Table, Tag, Upload, message } from 'antd';
+import { ApiOutlined, DownloadOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { DeviceCatalogItem, deviceAPI } from '../api';
-import { tableActionColumn, listTableProps, listTableScroll } from '../utils/tableActionColumn';
-
-const { Paragraph, Title, Text } = Typography;
+import { tableActionColumn, listTableProps, listTableScroll, serverTablePagination } from '../utils/tableActionColumn';
+import { tableIdLinkColumn } from '../utils/tableIdLinkColumn';
+import { tableEllipsisColumn, tableCompactColumn } from '../utils/tableEllipsisColumn';
 
 export function DevicesPage() {
   const navigate = useNavigate();
@@ -96,28 +96,29 @@ export function DevicesPage() {
   };
 
   const columns = [
-    { title: '设备 ID', dataIndex: 'device_id', key: 'device_id' },
-    { title: '产品代码', dataIndex: 'product_code', key: 'product_code' },
-    { title: '型号', dataIndex: 'product_model', key: 'product_model' },
-    { title: '硬件版本', dataIndex: 'hardware_version', key: 'hardware_version' },
-    { title: '设备分组', dataIndex: 'device_group', key: 'device_group', render: (value: string) => <Tag color="blue">{value}</Tag> },
-    { title: '当前版本', dataIndex: 'current_version', key: 'current_version' },
-    { title: 'OTA 上报', dataIndex: 'reported_version', key: 'reported_version', render: (v: string) => v || '-' },
-    {
-      title: '状态',
-      key: 'status',
-      render: (_: unknown, record: DeviceCatalogItem) => {
-        const flags = record.inconsistency_flags ?? [];
-        if (record.eligibility_state === 'blocked') {
-          return <Tag color="red">已阻断</Tag>;
-        }
-        if (flags.length > 0) {
-          return <Tag color="orange">目录异常</Tag>;
-        }
-        return <Tag color="green">正常</Tag>;
-      },
-    },
-    { title: '导入/更新时间', dataIndex: 'last_heartbeat', key: 'last_heartbeat', render: (value: string) => value ? new Date(value).toLocaleString() : '-' },
+    tableIdLinkColumn<DeviceCatalogItem>('设备 ID', 'device_id', (id) => navigate(`/devices/${id}`)),
+    tableEllipsisColumn<DeviceCatalogItem>('产品代码', 'product_code'),
+    tableEllipsisColumn<DeviceCatalogItem>('型号', 'product_model'),
+    tableEllipsisColumn<DeviceCatalogItem>('硬件版本', 'hardware_version'),
+    tableEllipsisColumn<DeviceCatalogItem>('设备分组', 'device_group'),
+    tableEllipsisColumn<DeviceCatalogItem>('当前版本', 'current_version'),
+    tableEllipsisColumn<DeviceCatalogItem>('OTA 上报', 'reported_version', {
+      render: (v) => (v ? String(v) : '-'),
+    }),
+    tableCompactColumn<DeviceCatalogItem>('状态', 'status', (_: unknown, record: DeviceCatalogItem) => {
+      const flags = record.inconsistency_flags ?? [];
+      if (record.eligibility_state === 'blocked') {
+        return <Tag color="red">已阻断</Tag>;
+      }
+      if (flags.length > 0) {
+        return <Tag color="orange">目录异常</Tag>;
+      }
+      return <Tag color="green">正常</Tag>;
+    }),
+    tableEllipsisColumn<DeviceCatalogItem>('导入/更新时间', 'last_heartbeat', {
+      size: 'date',
+      render: (v) => (v ? new Date(String(v)).toLocaleString() : '-'),
+    }),
     tableActionColumn<DeviceCatalogItem>(
       (_, record) => (
         <Space size={4} className="ota-table-actions">
@@ -132,18 +133,6 @@ export function DevicesPage() {
 
   return (
     <div className="ota-page">
-      <div>
-        <Title level={3} className="ota-page-title">设备管理</Title>
-        <Paragraph className="ota-page-subtitle">通过 CSV 导入第三方设备清单，作为 OTA 任务选设备的影子目录。</Paragraph>
-      </div>
-
-      <Alert
-        type="info"
-        showIcon
-        message="设备目录来自 CSV"
-        description="只保存 OTA 选型与分组需要的最小字段。开启「异常设备」可筛选已阻断或目录冲突的设备；点击详情可查看升级历史。"
-      />
-
       <Card className="ota-card">
         <div className="ota-toolbar">
           <div className="ota-toolbar-left">
@@ -179,12 +168,17 @@ export function DevicesPage() {
               onChange={(e) => setTagFilter(e.target.value)}
               onPressEnter={applyFilters}
             />
-            <Space size={4}>
-              <Text type="secondary">异常设备</Text>
-              <Switch checked={abnormalOnly} onChange={(checked) => { setAbnormalOnly(checked); setPage(1); }} />
-            </Space>
+            <label className="ota-toolbar-filter-switch">
+              <span className="ota-toolbar-filter-switch-label">仅异常设备</span>
+              <Switch
+                size="small"
+                checked={abnormalOnly}
+                onChange={(checked) => { setAbnormalOnly(checked); setPage(1); }}
+              />
+            </label>
           </div>
           <Space>
+            <Button icon={<ApiOutlined />} onClick={() => navigate('/simulator')}>设备端模拟器</Button>
             <Button icon={<ReloadOutlined />} onClick={() => void load()}>刷新</Button>
             <Button icon={<DownloadOutlined />} onClick={() => void handleDownloadTemplate()}>模板</Button>
             <Upload accept=".csv,text/csv" showUploadList={false} beforeUpload={(file) => { void handleImport(file); return false; }}>
@@ -199,14 +193,9 @@ export function DevicesPage() {
           columns={columns}
           dataSource={devices}
           loading={loading}
-          pagination={{
-            current: page,
-            pageSize,
-            total,
-            showSizeChanger: false,
-            onChange: (next) => setPage(next),
-          }}
-          scroll={listTableScroll(1280, devices.length)}
+          pagination={serverTablePagination(page, pageSize, total, setPage)}
+          scroll={listTableScroll(columns, devices.length)}
+          locale={{ emptyText: '暂无设备，请先导入 CSV 或使用模板' }}
         />
       </Card>
     </div>

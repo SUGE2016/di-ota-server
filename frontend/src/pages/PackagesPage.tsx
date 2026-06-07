@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Form, Input, Select, Space, message, Modal, Table, Tag, Typography } from 'antd';
+import { Button, Card, Form, Input, Select, Space, message, Modal, Table, Tag } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { Package, packageAPI } from '../api';
-import { tableActionColumn, listTableProps, listTableScroll } from '../utils/tableActionColumn';
-
-const { Paragraph, Title } = Typography;
+import { tableActionColumn, listTableProps, listTableScroll, clientTablePagination } from '../utils/tableActionColumn';
+import { tableIdLinkColumn } from '../utils/tableIdLinkColumn';
+import { tableEllipsisColumn, tableCompactColumn } from '../utils/tableEllipsisColumn';
 
 const statusColor: Record<string, string> = {
   Published: 'green',
@@ -90,11 +90,14 @@ export function PackagesPage() {
   };
 
   const columns = [
-    { title: '包 ID', dataIndex: 'package_id', key: 'package_id', width: 220, render: (v: string) => <a onClick={() => navigate(`/packages/${v}`)}>{v}</a> },
-    { title: '产品代码', dataIndex: 'product_code', key: 'product_code' },
-    { title: '版本', dataIndex: 'version', key: 'version' },
-    { title: '状态', dataIndex: 'status', key: 'status', render: (v: string) => <Tag color={statusColor[v]}>{v}</Tag> },
-    { title: '创建时间', dataIndex: 'created_at', key: 'created_at', render: (v: string) => new Date(v).toLocaleString() },
+    tableIdLinkColumn<Package>('包 ID', 'package_id', (id) => navigate(`/packages/${id}`)),
+    tableEllipsisColumn<Package>('产品代码', 'product_code'),
+    tableEllipsisColumn<Package>('版本', 'version'),
+    tableCompactColumn<Package>('状态', 'status', (v: string) => <Tag color={statusColor[v]}>{v}</Tag>, 'status'),
+    tableEllipsisColumn<Package>('创建时间', 'created_at', {
+      size: 'date',
+      render: (v) => new Date(String(v)).toLocaleString(),
+    }),
     tableActionColumn<Package>(
       (_, r) => (
         r.status === 'Published' ? (
@@ -116,11 +119,6 @@ export function PackagesPage() {
 
   return (
     <div className="ota-page">
-      <div>
-        <Title level={3} className="ota-page-title">固件包管理</Title>
-        <Paragraph className="ota-page-subtitle">上传、查看和下架发布包，保证版本流转可追踪。</Paragraph>
-      </div>
-
       <Card
         className="ota-card"
         extra={<Button type="primary" icon={<UploadOutlined />} onClick={() => setUploadOpen(true)}>上传固件包</Button>}
@@ -158,8 +156,8 @@ export function PackagesPage() {
           dataSource={filteredPackages}
           loading={loading}
           rowKey="package_id"
-          pagination={{ pageSize: 12 }}
-          scroll={listTableScroll(860, filteredPackages.length)}
+          pagination={clientTablePagination(12)}
+          scroll={listTableScroll(columns, filteredPackages.length)}
         />
 
         <Modal width="min(560px, calc(100vw - 24px))" title="上传固件包" open={uploadOpen} onCancel={() => { setUploadOpen(false); form.resetFields(); }} footer={null}>

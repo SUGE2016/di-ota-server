@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography, message } from 'antd';
+import { Button, Card, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, message } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { CreateUserPayload, User, userAPI } from '../api';
-import { tableActionColumn, listTableProps, listTableScroll } from '../utils/tableActionColumn';
-
-const { Paragraph, Title, Text } = Typography;
+import { tableActionColumn, listTableProps, listTableScroll, serverTablePagination } from '../utils/tableActionColumn';
+import { tableEllipsisColumn, tableEllipsisRenderColumn, tableCompactColumn } from '../utils/tableEllipsisColumn';
 
 export function UsersPage() {
   const navigate = useNavigate();
@@ -88,31 +87,23 @@ export function UsersPage() {
   };
 
   const columns = [
-    { title: '用户名', dataIndex: 'username', key: 'username' },
-    { title: '显示名', dataIndex: 'display_name', key: 'display_name' },
-    {
-      title: '角色',
-      key: 'roles',
-      render: (_: unknown, record: User) => (
-        <Space size={[6, 6]} wrap>
-          {record.roles.map((role) => <span key={role} className="ota-list-chip">{role}</span>)}
-        </Space>
-      ),
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      render: (value: string) => <Tag color={value === 'enabled' ? 'green' : 'default'}>{value === 'enabled' ? '启用' : '禁用'}</Tag>,
-    },
-    {
-      title: '认证来源',
-      dataIndex: 'auth_source',
-      key: 'auth_source',
-      render: (value: string) => <Tag color={value === 'sso' ? 'cyan' : 'blue'}>{value === 'sso' ? 'SSO' : '本地'}</Tag>,
-    },
-    { title: '最近登录', dataIndex: 'last_login_at', key: 'last_login_at', render: (value: string | null) => value ? new Date(value).toLocaleString() : '-' },
-    { title: '最后操作', dataIndex: 'last_operation_at', key: 'last_operation_at', render: (value: string) => new Date(value).toLocaleString() },
+    tableEllipsisColumn<User>('用户名', 'username'),
+    tableEllipsisColumn<User>('显示名', 'display_name'),
+    tableEllipsisRenderColumn<User>('角色', 'roles', (record) => record.roles.join(', ')),
+    tableCompactColumn<User>('状态', 'status', (value: string) => (
+      <Tag color={value === 'enabled' ? 'green' : 'default'}>{value === 'enabled' ? '启用' : '禁用'}</Tag>
+    ), 'status'),
+    tableCompactColumn<User>('认证来源', 'auth_source', (value: string) => (
+      <Tag color={value === 'sso' ? 'cyan' : 'blue'}>{value === 'sso' ? 'SSO' : '本地'}</Tag>
+    ), 'auth_source'),
+    tableEllipsisColumn<User>('最近登录', 'last_login_at', {
+      size: 'date',
+      render: (v) => (v ? new Date(String(v)).toLocaleString() : '-'),
+    }),
+    tableEllipsisColumn<User>('最后操作', 'last_operation_at', {
+      size: 'date',
+      render: (v) => new Date(String(v)).toLocaleString(),
+    }),
     tableActionColumn<User>(
       (_, record) => (
         <Space size={4} className="ota-table-actions">
@@ -133,11 +124,6 @@ export function UsersPage() {
 
   return (
     <div className="ota-page">
-      <div>
-        <Title level={3} className="ota-page-title">用户管理</Title>
-        <Paragraph className="ota-page-subtitle">统一管理系统账号、角色和可用状态。</Paragraph>
-      </div>
-
       <Card className="ota-card">
         <div className="ota-toolbar">
           <div className="ota-toolbar-left">
@@ -178,9 +164,9 @@ export function UsersPage() {
           columns={columns}
           loading={loading}
           dataSource={users}
-          pagination={{ current: page, pageSize, total, showSizeChanger: false, onChange: setPage }}
+          pagination={serverTablePagination(page, pageSize, total, setPage)}
           locale={{ emptyText: '当前没有匹配的用户数据。' }}
-          scroll={listTableScroll(1060, users.length)}
+          scroll={listTableScroll(columns, users.length)}
         />
       </Card>
 

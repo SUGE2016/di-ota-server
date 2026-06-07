@@ -3,9 +3,18 @@ import { Layout, Menu, Avatar, Button, Typography, Space, Tag } from 'antd';
 import { DashboardOutlined, BoxPlotOutlined, ThunderboltOutlined, LogoutOutlined, UserOutlined, TeamOutlined, LaptopOutlined, AlertOutlined } from '@ant-design/icons';
 import useAuthStore from '../stores/authStore';
 import { APP_VERSION_LABEL, COPYRIGHT_HOLDER } from '../constants/version';
+import { menuKeyForPath, pageMetaForPath } from '../constants/pageMeta';
+import { OtaLogo } from './OtaLogo';
 
 const { Sider, Header, Content } = Layout;
 const { Text } = Typography;
+
+const roleLabels: Record<string, string> = {
+  admin: '管理员',
+  release: '发布工程师',
+  readonly: '只读',
+  audit: '审计',
+};
 
 const menuItems = [
   { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' },
@@ -24,18 +33,27 @@ export function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const { title: pageTitle, subtitle: pageSubtitle } = pageMetaForPath(location.pathname);
+  const activeMenuKey = menuKeyForPath(location.pathname);
+
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
+  const roleText = roles.map((role) => roleLabels[role] ?? role).join(' / ');
+  const showRole = roleText.length > 0 && roleText !== username;
+
   return (
     <Layout className="ota-shell" style={{ minHeight: '100vh' }}>
       <Sider theme="light" width={230} collapsedWidth={0} breakpoint="lg" className="ota-shell-sider">
-        <div className="ota-brand">OTA 管理台</div>
+        <div className="ota-brand">
+          <OtaLogo className="ota-brand-logo" size={30} />
+          <span className="ota-brand-text">OTA 管理台</span>
+        </div>
         <Menu
           mode="inline"
-          selectedKeys={[location.pathname === '/' ? '/dashboard' : location.pathname]}
+          selectedKeys={[activeMenuKey]}
           items={menuItems}
           onClick={({ key }) => navigate(key)}
           style={{ borderInlineEnd: 0, padding: '8px 10px' }}
@@ -48,18 +66,20 @@ export function MainLayout() {
       <Layout>
         <Header className="ota-header" style={{ padding: '0 20px', borderBottom: '1px solid #e7ecf3' }}>
           <div className="ota-header-title">
-            <Text strong>OTA 发布控制台</Text>
-            <div>
-              <Text type="secondary">固件发布、设备升级与任务监控</Text>
-            </div>
+            <Text strong className="ota-header-page-title">{pageTitle}</Text>
+            <Text type="secondary" className="ota-header-page-subtitle">{pageSubtitle}</Text>
           </div>
-          <Space size={12} className="ota-header-actions" wrap>
-            <Space size={[8, 8]} wrap>
-              <Tag color={authSource === 'sso' ? 'cyan' : 'default'}>{authSource === 'sso' ? 'SSO 登录' : '本地登录'}</Tag>
-              <Text type="secondary">{roles.join(' / ')}</Text>
+          <Space size={10} className="ota-header-actions" align="center">
+            <Space size={8} align="center" className="ota-header-user-wrap">
+              <Avatar size={32} icon={<UserOutlined />} />
+              <div className="ota-header-user">
+                <Text className="ota-header-user-name">{username}</Text>
+                {showRole && (
+                  <Text type="secondary" className="ota-header-user-role">{roleText}</Text>
+                )}
+              </div>
             </Space>
-            <Avatar icon={<UserOutlined />} />
-            <Text>{username}</Text>
+            <Tag color={authSource === 'sso' ? 'cyan' : 'default'}>{authSource === 'sso' ? 'SSO' : '本地'}</Tag>
             <Button type="text" danger icon={<LogoutOutlined />} onClick={handleLogout}>
               退出
             </Button>

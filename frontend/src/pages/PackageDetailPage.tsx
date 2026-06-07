@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Breadcrumb, Button, Card, Descriptions, message, Tag, Typography } from 'antd';
+import { Breadcrumb, Button, Card, Descriptions, message, Tag } from 'antd';
 import { useParams, useNavigate } from 'react-router-dom';
 import { packageAPI, Package } from '../api';
-
-const { Paragraph, Title } = Typography;
 
 export function PackageDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,16 +17,11 @@ export function PackageDetailPage() {
 
   return (
     <div className="ota-page">
-      <div>
-        <Title level={3} className="ota-page-title">固件包详情</Title>
-        <Paragraph className="ota-page-subtitle">查看包元数据与发布状态，快速判断可用性。</Paragraph>
-      </div>
-
       <Breadcrumb style={{ marginBottom: 16 }} items={[
         { title: <a onClick={() => navigate('/packages')}>固件包</a> },
         { title: pkg.package_id },
       ]} />
-      <Card title="固件包详情" className="ota-card">
+      <Card title="包信息" className="ota-card">
         <Descriptions bordered column={{ xs: 1, sm: 2 }}>
           <Descriptions.Item label="包 ID">{pkg.package_id}</Descriptions.Item>
           <Descriptions.Item label="状态"><Tag>{pkg.status}</Tag></Descriptions.Item>

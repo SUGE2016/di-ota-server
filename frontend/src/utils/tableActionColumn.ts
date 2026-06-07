@@ -3,6 +3,17 @@ import type { TableProps } from 'antd';
 
 const FIXED_ACTION_CLASS = 'ota-table-fixed-col';
 
+/** 列宽预设：集中定义，页面不再散落写像素 */
+export const TABLE_COL_WIDTH = {
+  id: 220,
+  text: 112,
+  wide: 160,
+  detail: 200,
+  date: 168,
+  tag: 96,
+  selection: 48,
+} as const;
+
 export type TableActionColumnOptions = {
   /** 该表可能出现的操作按钮文案，用于估算列宽 */
   actionLabels: string[];
@@ -10,7 +21,7 @@ export type TableActionColumnOptions = {
   maxButtonsPerRow?: number;
 };
 
-/** 按按钮文案估算冻结操作列宽度（Ant Design 冻结列仍需数值 width，但不写死统一像素） */
+/** 按按钮文案估算冻结操作列宽度（Ant Design 冻结列仍需数值 width） */
 export function measureActionColumnWidth(options: TableActionColumnOptions): number {
   const { actionLabels, maxButtonsPerRow } = options;
   if (actionLabels.length === 0) {
@@ -46,13 +57,51 @@ export function tableActionColumn<T>(
   };
 }
 
-/** 带冻结列的列表表格通用属性（数据列 auto 布局，仅操作列按内容给定 width） */
+/** 根据列定义估算横向滚动宽度，保证冻结操作列生效 */
+export function measureTableScrollX(columns: readonly { width?: number | string }[]): number {
+  let total = 0;
+  for (const col of columns) {
+    if (typeof col.width === 'number') {
+      total += col.width;
+    } else {
+      total += TABLE_COL_WIDTH.text;
+    }
+  }
+  return Math.max(720, total + 32);
+}
+
+/** 带冻结列的列表表格：fixed 布局 + 列宽约束，ellipsis 才能生效 */
 export const listTableProps: Pick<TableProps, 'size' | 'tableLayout' | 'className'> = {
   size: 'middle',
-  tableLayout: 'auto',
+  tableLayout: 'fixed',
   className: 'ota-list-table',
 };
 
-export function listTableScroll(minWidth: number, rowCount: number): TableProps['scroll'] {
-  return rowCount > 0 ? { x: minWidth } : undefined;
+export function listTableScroll<T>(
+  columns: readonly ColumnType<T>[],
+  rowCount: number,
+  extraWidth = 0,
+): TableProps['scroll'] {
+  return rowCount > 0 ? { x: measureTableScrollX(columns) + extraWidth } : undefined;
+}
+
+/** 服务端分页列表通用配置 */
+export function serverTablePagination(
+  page: number,
+  pageSize: number,
+  total: number,
+  onChange: (page: number) => void,
+): NonNullable<TableProps['pagination']> {
+  return {
+    current: page,
+    pageSize,
+    total,
+    showSizeChanger: false,
+    onChange,
+  };
+}
+
+/** 客户端分页列表通用配置 */
+export function clientTablePagination(pageSize = 12): NonNullable<TableProps['pagination']> {
+  return { pageSize, showSizeChanger: false };
 }

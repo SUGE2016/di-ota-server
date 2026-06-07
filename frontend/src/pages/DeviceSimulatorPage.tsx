@@ -12,7 +12,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   UPGRADE_STATUS_STEPS,
   checkUpdate,
@@ -164,7 +164,7 @@ export function DeviceSimulatorPage() {
             模拟设备调用 check-update / report-status，用于联调升级链路。
           </Paragraph>
         </div>
-        <Link to="/login">返回管理台登录</Link>
+        <Link to="/devices">返回设备管理</Link>
       </div>
 
       <Row gutter={[16, 16]}>

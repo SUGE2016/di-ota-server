@@ -3,7 +3,7 @@ import { Breadcrumb, Button, Card, Descriptions, Form, Input, Modal, Popconfirm,
 import { useNavigate, useParams } from 'react-router-dom';
 import { User, userAPI } from '../api';
 
-const { Paragraph, Title, Text } = Typography;
+const { Text } = Typography;
 
 export function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -94,11 +94,6 @@ export function UserDetailPage() {
 
   return (
     <div className="ota-page">
-      <div>
-        <Title level={3} className="ota-page-title">用户详情</Title>
-        <Paragraph className="ota-page-subtitle">查看账号信息、角色配置和最近操作状态。</Paragraph>
-      </div>
-
       <Breadcrumb
         items={[
           { title: <a onClick={() => navigate('/users')}>用户管理</a> },

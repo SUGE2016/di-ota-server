@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Breadcrumb, Button, Card, Descriptions, message, Progress, Space, Table, Tag, Typography } from 'antd';
+import { Breadcrumb, Button, Card, Descriptions, message, Progress, Space, Table, Tag } from 'antd';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ReleaseTask, TaskStats, AuditLog, taskAPI } from '../api';
-
-const { Paragraph, Title } = Typography;
+import { listTableProps, listTableScroll } from '../utils/tableActionColumn';
+import { tableEllipsisColumn } from '../utils/tableEllipsisColumn';
 
 const stateColor: Record<string, string> = {
   Running: 'blue',
@@ -63,25 +63,23 @@ export function TaskDetailPage() {
   const actions = validActions[task.state] || [];
 
   const auditColumns = [
-    { title: '操作', dataIndex: 'operation_type', width: 100 },
-    { title: '操作者', dataIndex: 'operator', width: 100 },
-    { title: '时间', dataIndex: 'created_at', render: (v: string) => new Date(v).toLocaleString() },
+    tableEllipsisColumn<AuditLog>('操作', 'operation_type'),
+    tableEllipsisColumn<AuditLog>('操作者', 'operator'),
+    tableEllipsisColumn<AuditLog>('时间', 'created_at', {
+      size: 'date',
+      render: (v) => new Date(String(v)).toLocaleString(),
+    }),
   ];
 
   return (
     <div className="ota-page">
-      <div>
-        <Title level={3} className="ota-page-title">任务详情</Title>
-        <Paragraph className="ota-page-subtitle">查看任务状态、统计指标和审计记录。</Paragraph>
-      </div>
-
       <Breadcrumb style={{ marginBottom: 16 }} items={[
         { title: <a onClick={() => navigate('/tasks')}>发布任务</a> },
         { title: task.task_id },
       ]} />
 
       <Space direction="vertical" style={{ width: '100%' }} size="large">
-        <Card title="任务详情" className="ota-card">
+        <Card title="基本信息" className="ota-card">
           <Descriptions bordered column={{ xs: 1, sm: 2, lg: 3 }}>
             <Descriptions.Item label="任务 ID">{task.task_id}</Descriptions.Item>
             <Descriptions.Item label="状态"><Tag color={stateColor[task.state]}>{task.state}</Tag></Descriptions.Item>
@@ -118,7 +116,7 @@ export function TaskDetailPage() {
 
         {audits.length > 0 && (
           <Card title="审计日志" className="ota-card">
-            <Table columns={auditColumns} dataSource={audits} rowKey="id" pagination={false} size="small" scroll={audits.length > 0 ? { x: 560 } : undefined} />
+            <Table {...listTableProps} columns={auditColumns} dataSource={audits} rowKey="id" pagination={false} size="small" scroll={listTableScroll(auditColumns, audits.length)} />
           </Card>
         )}
       </Space>

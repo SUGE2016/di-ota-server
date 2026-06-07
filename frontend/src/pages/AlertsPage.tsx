@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Select, Space, Table, Tag, Tooltip, Typography, message } from 'antd';
+import { Button, Card, Select, Space, Table, Tag, message } from 'antd';
 import { CheckOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { AlertItem, alertAPI } from '../api';
-
-const { Paragraph, Title } = Typography;
+import { listTableProps, listTableScroll, serverTablePagination, TABLE_COL_WIDTH } from '../utils/tableActionColumn';
+import { tableIdLinkRenderColumn } from '../utils/tableIdLinkColumn';
+import { tableEllipsisColumn, tableCompactColumn } from '../utils/tableEllipsisColumn';
 
 const severityColor: Record<string, string> = {
   critical: 'red',
@@ -65,55 +66,27 @@ export function AlertsPage() {
   };
 
   const columns = [
-    { title: '告警类型', dataIndex: 'alert_type', key: 'alert_type', width: 140, ellipsis: true },
-    {
-      title: '级别',
-      dataIndex: 'severity',
-      key: 'severity',
-      width: 90,
-      render: (value: string) => <Tag color={severityColor[value]}>{value}</Tag>,
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 110,
-      render: (value: string) => <Tag color={statusColor[value]}>{value}</Tag>,
-    },
-    {
-      title: '资源',
-      key: 'resource',
-      width: 200,
-      ellipsis: true,
-      render: (_: unknown, r: AlertItem) => {
-        const label = `${r.resource_type}/${r.resource_id}`;
-        return (
-          <Tooltip title={label}>
-            <Typography.Link
-              ellipsis
-              style={{ display: 'block', maxWidth: '100%' }}
-              onClick={() => {
-                if (r.resource_type === 'task') navigate(`/tasks/${r.resource_id}`);
-                else if (r.resource_type === 'device') navigate(`/devices/${r.resource_id}`);
-              }}
-            >
-              {label}
-            </Typography.Link>
-          </Tooltip>
-        );
+    tableEllipsisColumn<AlertItem>('告警类型', 'alert_type'),
+    tableCompactColumn<AlertItem>('级别', 'severity', (value: string) => <Tag color={severityColor[value]}>{value}</Tag>, 'severity'),
+    tableCompactColumn<AlertItem>('状态', 'status', (value: string) => <Tag color={statusColor[value]}>{value}</Tag>, 'status'),
+    tableIdLinkRenderColumn<AlertItem>(
+      '资源',
+      'resource',
+      (r) => `${r.resource_type}/${r.resource_id}`,
+      (r) => {
+        if (r.resource_type === 'task') navigate(`/tasks/${r.resource_id}`);
+        else if (r.resource_type === 'device') navigate(`/devices/${r.resource_id}`);
       },
-    },
-    { title: '说明', dataIndex: 'message', key: 'message', ellipsis: true },
-    { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 170, render: (v: string) => new Date(v).toLocaleString() },
+    ),
+    tableEllipsisColumn<AlertItem>('说明', 'message', { size: 'detail' }),
+    tableEllipsisColumn<AlertItem>('创建时间', 'created_at', {
+      size: 'date',
+      render: (v) => new Date(String(v)).toLocaleString(),
+    }),
   ];
 
   return (
     <div className="ota-page">
-      <div>
-        <Title level={3} className="ota-page-title">告警中心</Title>
-        <Paragraph className="ota-page-subtitle">任务熔断与设备升级异常事件，支持确认与关闭。</Paragraph>
-      </div>
-
       <Card className="ota-card">
         <div className="ota-toolbar">
           <div className="ota-toolbar-left">
@@ -150,14 +123,14 @@ export function AlertsPage() {
         </div>
 
         <Table
+          {...listTableProps}
           rowKey="alert_id"
-          tableLayout="fixed"
           rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys as string[]) }}
           columns={columns}
           dataSource={alerts}
           loading={loading}
-          pagination={{ current: page, pageSize, total, showSizeChanger: false, onChange: setPage }}
-          scroll={alerts.length > 0 ? { x: 1100 } : undefined}
+          pagination={serverTablePagination(page, pageSize, total, setPage)}
+          scroll={listTableScroll(columns, alerts.length, TABLE_COL_WIDTH.selection)}
           locale={{ emptyText: '暂无告警事件' }}
         />
       </Card>

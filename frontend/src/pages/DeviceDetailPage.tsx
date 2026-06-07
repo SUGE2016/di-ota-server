@@ -65,11 +65,6 @@ export function DeviceDetailPage() {
 
   return (
     <div className="ota-page">
-      <div>
-        <Title level={3} className="ota-page-title">设备详情</Title>
-        <Paragraph className="ota-page-subtitle">设备注册表信息、目录冲突标记与 OTA 升级历史。</Paragraph>
-      </div>
-
       <Breadcrumb
         style={{ marginBottom: 16 }}
         items={[
