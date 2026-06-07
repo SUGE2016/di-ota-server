@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Select, Space, Table, Tag, Typography, message } from 'antd';
+import { Button, Card, Select, Space, Table, Tag, Tooltip, Typography, message } from 'antd';
 import { CheckOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { AlertItem, alertAPI } from '../api';
@@ -65,37 +65,46 @@ export function AlertsPage() {
   };
 
   const columns = [
-    { title: '告警类型', dataIndex: 'alert_type', key: 'alert_type' },
+    { title: '告警类型', dataIndex: 'alert_type', key: 'alert_type', width: 140, ellipsis: true },
     {
       title: '级别',
       dataIndex: 'severity',
       key: 'severity',
+      width: 90,
       render: (value: string) => <Tag color={severityColor[value]}>{value}</Tag>,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
+      width: 110,
       render: (value: string) => <Tag color={statusColor[value]}>{value}</Tag>,
     },
     {
       title: '资源',
       key: 'resource',
-      render: (_: unknown, r: AlertItem) => (
-        <Button
-          type="link"
-          size="small"
-          onClick={() => {
-            if (r.resource_type === 'task') navigate(`/tasks/${r.resource_id}`);
-            else if (r.resource_type === 'device') navigate(`/devices/${r.resource_id}`);
-          }}
-        >
-          {r.resource_type}/{r.resource_id}
-        </Button>
-      ),
+      width: 200,
+      ellipsis: true,
+      render: (_: unknown, r: AlertItem) => {
+        const label = `${r.resource_type}/${r.resource_id}`;
+        return (
+          <Tooltip title={label}>
+            <Typography.Link
+              ellipsis
+              style={{ display: 'block', maxWidth: '100%' }}
+              onClick={() => {
+                if (r.resource_type === 'task') navigate(`/tasks/${r.resource_id}`);
+                else if (r.resource_type === 'device') navigate(`/devices/${r.resource_id}`);
+              }}
+            >
+              {label}
+            </Typography.Link>
+          </Tooltip>
+        );
+      },
     },
     { title: '说明', dataIndex: 'message', key: 'message', ellipsis: true },
-    { title: '创建时间', dataIndex: 'created_at', key: 'created_at', render: (v: string) => new Date(v).toLocaleString() },
+    { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 170, render: (v: string) => new Date(v).toLocaleString() },
   ];
 
   return (
@@ -142,12 +151,13 @@ export function AlertsPage() {
 
         <Table
           rowKey="alert_id"
+          tableLayout="fixed"
           rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys as string[]) }}
           columns={columns}
           dataSource={alerts}
           loading={loading}
           pagination={{ current: page, pageSize, total, showSizeChanger: false, onChange: setPage }}
-          scroll={alerts.length > 0 ? { x: 980 } : undefined}
+          scroll={alerts.length > 0 ? { x: 1100 } : undefined}
           locale={{ emptyText: '暂无告警事件' }}
         />
       </Card>

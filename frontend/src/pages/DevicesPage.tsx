@@ -3,6 +3,7 @@ import { Alert, Button, Card, Input, Select, Space, Switch, Table, Tag, Typograp
 import { DownloadOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { DeviceCatalogItem, deviceAPI } from '../api';
+import { tableActionColumn, listTableProps, listTableScroll } from '../utils/tableActionColumn';
 
 const { Paragraph, Title, Text } = Typography;
 
@@ -117,16 +118,16 @@ export function DevicesPage() {
       },
     },
     { title: '导入/更新时间', dataIndex: 'last_heartbeat', key: 'last_heartbeat', render: (value: string) => value ? new Date(value).toLocaleString() : '-' },
-    {
-      title: '操作',
-      key: 'actions',
-      fixed: 'right' as const,
-      render: (_: unknown, record: DeviceCatalogItem) => (
-        <Button type="link" onClick={() => navigate(`/devices/${record.device_id}`)}>
-          查看详情
-        </Button>
+    tableActionColumn<DeviceCatalogItem>(
+      (_, record) => (
+        <Space size={4} className="ota-table-actions">
+          <Button type="link" size="small" onClick={() => navigate(`/devices/${record.device_id}`)}>
+            查看详情
+          </Button>
+        </Space>
       ),
-    },
+      { actionLabels: ['查看详情'] },
+    ),
   ];
 
   return (
@@ -193,6 +194,7 @@ export function DevicesPage() {
         </div>
 
         <Table
+          {...listTableProps}
           rowKey="device_id"
           columns={columns}
           dataSource={devices}
@@ -204,7 +206,7 @@ export function DevicesPage() {
             showSizeChanger: false,
             onChange: (next) => setPage(next),
           }}
-          scroll={devices.length > 0 ? { x: 1300 } : undefined}
+          scroll={listTableScroll(1280, devices.length)}
         />
       </Card>
     </div>

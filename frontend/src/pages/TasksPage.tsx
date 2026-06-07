@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { AutoComplete, Button, Card, DatePicker, Form, Input, InputNumber, Switch, Select, message, Modal, Table, Tag, Typography } from 'antd';
+import { AutoComplete, Button, Card, DatePicker, Form, Input, InputNumber, Switch, Select, Space, message, Modal, Table, Tag, Typography } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { DeviceCatalogItem, ReleaseTask, deviceAPI, taskAPI } from '../api';
+import { tableActionColumn, listTableProps, listTableScroll } from '../utils/tableActionColumn';
 
 const { Paragraph, Title } = Typography;
 
@@ -97,16 +98,24 @@ export function TasksPage() {
     { title: '型号', dataIndex: 'product_model', key: 'product_model' },
     { title: '状态', dataIndex: 'state', key: 'state', render: (v: string) => <Tag color={stateColor[v]}>{v}</Tag> },
     { title: '创建时间', dataIndex: 'created_at', key: 'created_at', render: (v: string) => new Date(v).toLocaleString() },
-    {
-      title: '操作', key: 'action', render: (_: unknown, r: ReleaseTask) => {
+    tableActionColumn<ReleaseTask>(
+      (_, r) => {
         const actions = validActions[r.state] || [];
-        return actions.map((a) => (
-          <Button key={a} type="link" size="small" style={{ padding: 0, marginRight: 8 }} onClick={() => handleAction(r, a)}>
-            {a === 'start' ? '开始' : a === 'pause' ? '暂停' : a === 'resume' ? '恢复' : a === 'terminate' ? '终止' : '回滚'}
-          </Button>
-        ));
+        const labels: Record<string, string> = {
+          start: '开始', pause: '暂停', resume: '恢复', terminate: '终止', rollback: '回滚',
+        };
+        return (
+          <Space size={4} className="ota-table-actions">
+            {actions.map((a) => (
+              <Button key={a} type="link" size="small" onClick={() => handleAction(r, a)}>
+                {labels[a] ?? a}
+              </Button>
+            ))}
+          </Space>
+        );
       },
-    },
+      { actionLabels: ['开始', '暂停', '恢复', '终止', '回滚'], maxButtonsPerRow: 3 },
+    ),
   ];
 
   const filteredTasks = tasks.filter((t) => {
@@ -162,7 +171,15 @@ export function TasksPage() {
           <span className="ota-muted">共 {filteredTasks.length} 条</span>
         </div>
 
-        <Table columns={columns} dataSource={filteredTasks} loading={loading} rowKey="task_id" pagination={{ pageSize: 12 }} size="middle" scroll={filteredTasks.length > 0 ? { x: 920 } : undefined} />
+        <Table
+          {...listTableProps}
+          columns={columns}
+          dataSource={filteredTasks}
+          loading={loading}
+          rowKey="task_id"
+          pagination={{ pageSize: 12 }}
+          scroll={listTableScroll(900, filteredTasks.length)}
+        />
 
         <Modal width="min(560px, calc(100vw - 24px))" title="新建发布任务" open={createOpen} onCancel={() => { setCreateOpen(false); form.resetFields(); }} footer={null}>
           <Form form={form} layout="vertical" onFinish={handleCreate}>

@@ -3,6 +3,7 @@ import { Button, Card, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { CreateUserPayload, User, userAPI } from '../api';
+import { tableActionColumn, listTableProps, listTableScroll } from '../utils/tableActionColumn';
 
 const { Paragraph, Title, Text } = Typography;
 
@@ -112,24 +113,22 @@ export function UsersPage() {
     },
     { title: '最近登录', dataIndex: 'last_login_at', key: 'last_login_at', render: (value: string | null) => value ? new Date(value).toLocaleString() : '-' },
     { title: '最后操作', dataIndex: 'last_operation_at', key: 'last_operation_at', render: (value: string) => new Date(value).toLocaleString() },
-    {
-      title: '操作',
-      key: 'actions',
-      fixed: 'right' as const,
-      render: (_: unknown, record: User) => (
-        <Space size={4} wrap>
-          <Button type="link" onClick={() => navigate(`/users/${record.user_id}`)}>查看详情</Button>
+    tableActionColumn<User>(
+      (_, record) => (
+        <Space size={4} className="ota-table-actions">
+          <Button type="link" size="small" onClick={() => navigate(`/users/${record.user_id}`)}>查看详情</Button>
           <Popconfirm
             title={record.status === 'enabled' ? '确认禁用该用户？' : '确认启用该用户？'}
             onConfirm={() => void handleToggleStatus(record)}
           >
-            <Button type="link" danger={record.status === 'enabled'}>
+            <Button type="link" size="small" danger={record.status === 'enabled'}>
               {record.status === 'enabled' ? '禁用' : '启用'}
             </Button>
           </Popconfirm>
         </Space>
       ),
-    },
+      { actionLabels: ['查看详情', '禁用', '启用'] },
+    ),
   ];
 
   return (
@@ -174,13 +173,14 @@ export function UsersPage() {
         </div>
 
         <Table
+          {...listTableProps}
           rowKey="user_id"
           columns={columns}
           loading={loading}
           dataSource={users}
           pagination={{ current: page, pageSize, total, showSizeChanger: false, onChange: setPage }}
           locale={{ emptyText: '当前没有匹配的用户数据。' }}
-          scroll={users.length > 0 ? { x: 1080 } : undefined}
+          scroll={listTableScroll(1060, users.length)}
         />
       </Card>
 

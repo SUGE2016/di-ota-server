@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Form, Input, Select, message, Modal, Table, Tag, Typography } from 'antd';
+import { Button, Card, Form, Input, Select, Space, message, Modal, Table, Tag, Typography } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { Package, packageAPI } from '../api';
+import { tableActionColumn, listTableProps, listTableScroll } from '../utils/tableActionColumn';
 
 const { Paragraph, Title } = Typography;
 
@@ -94,11 +95,16 @@ export function PackagesPage() {
     { title: '版本', dataIndex: 'version', key: 'version' },
     { title: '状态', dataIndex: 'status', key: 'status', render: (v: string) => <Tag color={statusColor[v]}>{v}</Tag> },
     { title: '创建时间', dataIndex: 'created_at', key: 'created_at', render: (v: string) => new Date(v).toLocaleString() },
-    {
-      title: '操作', key: 'action', render: (_: unknown, r: Package) => (
-        r.status === 'Published' ? <Button type="link" size="small" style={{ padding: 0 }} onClick={() => handleDeprecate(r)}>下架</Button> : null
+    tableActionColumn<Package>(
+      (_, r) => (
+        r.status === 'Published' ? (
+          <Space size={4} className="ota-table-actions">
+            <Button type="link" size="small" onClick={() => handleDeprecate(r)}>下架</Button>
+          </Space>
+        ) : null
       ),
-    },
+      { actionLabels: ['下架'] },
+    ),
   ];
 
   const filteredPackages = packages.filter((p) => {
@@ -146,7 +152,15 @@ export function PackagesPage() {
           <span className="ota-muted">共 {filteredPackages.length} 条</span>
         </div>
 
-        <Table columns={columns} dataSource={filteredPackages} loading={loading} rowKey="package_id" pagination={{ pageSize: 12 }} size="middle" scroll={filteredPackages.length > 0 ? { x: 880 } : undefined} />
+        <Table
+          {...listTableProps}
+          columns={columns}
+          dataSource={filteredPackages}
+          loading={loading}
+          rowKey="package_id"
+          pagination={{ pageSize: 12 }}
+          scroll={listTableScroll(860, filteredPackages.length)}
+        />
 
         <Modal width="min(560px, calc(100vw - 24px))" title="上传固件包" open={uploadOpen} onCancel={() => { setUploadOpen(false); form.resetFields(); }} footer={null}>
           <Form form={form} layout="vertical" onFinish={handleUpload}>

@@ -345,6 +345,41 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+.ota-table-fixed-col {
+  text-align: center !important;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.ota-list-table .ant-table-cell-fix-right.ota-table-fixed-col {
+  width: auto;
+  min-width: max-content;
+  padding-inline: 12px !important;
+  background: var(--bg-panel);
+}
+
+.ota-list-table .ant-table-thead .ant-table-cell-fix-right.ota-table-fixed-col {
+  background: #f7f9fc;
+}
+
+.ota-list-table .ant-table-ping-right .ant-table-cell-fix-right-first::after {
+  box-shadow: inset -8px 0 8px -8px rgba(15, 23, 42, 0.12);
+}
+
+.ota-table-actions.ant-space {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.ota-table-actions .ant-btn-link {
+  padding: 0 2px;
+  height: auto;
+  line-height: 1.45;
+  font-size: 13px;
+}
+
 @media (max-width: 900px) {
   .ota-shell .ant-layout-content {
     padding: 12px !important;
