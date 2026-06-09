@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"ota-server/backend/internal/server"
 )
 
 func mockDeviceRegistry(mock sqlmock.Sqlmock, deviceID, group, model, hw, reported, catalog string) {
@@ -25,6 +26,17 @@ func mockDeviceRegistry(mock sqlmock.Sqlmock, deviceID, group, model, hw, report
 		}).AddRow(deviceID, group, model, hw, "AMS", []byte(`{}`), reported, reported, catalog, now, "csv", "active", []byte(`[]`), now, now, now))
 }
 
+func mockDeviceAuthCredential(mock sqlmock.Sqlmock, deviceID, secret, eligibility string) {
+	mock.ExpectQuery(`SELECT device_id, device_secret, eligibility_state`).
+		WithArgs(deviceID).
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "device_secret", "eligibility_state"}).
+			AddRow(deviceID, secret, eligibility))
+}
+
+func deviceAuthHeader(deviceID, secret, method, path string, body []byte) string {
+	return server.BuildDeviceAuthorizationHeader(deviceID, secret, method, path, body, time.Now().Unix())
+}
+
 func TestDeviceCheckUpdate_AuthDisabled_NotInCatalog(t *testing.T) {
 	cfg := defaultTestConfig()
 	cfg.Auth.DeviceAPIAuthEnabled = false
@@ -34,7 +46,7 @@ func TestDeviceCheckUpdate_AuthDisabled_NotInCatalog(t *testing.T) {
 		WithArgs("AMS000001").
 		WillReturnError(sql.ErrNoRows)
 
-	body := `{"device_id":"AMS000001","group":"org-1001","product_model":"V9","hardware_version":"1.0","current_version":"v2.3"}`
+	body := `{"device_id":"AMS000001","current_version":"v2.3"}`
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/device/v1/check-update", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -45,12 +57,12 @@ func TestDeviceCheckUpdate_AuthDisabled_NotInCatalog(t *testing.T) {
 	}
 }
 
-func TestDeviceCheckUpdate_AuthEnabled_MissingBearer(t *testing.T) {
+func TestDeviceCheckUpdate_AuthEnabled_MissingSignature(t *testing.T) {
 	cfg := defaultTestConfig()
 	cfg.Auth.DeviceAPIAuthEnabled = true
 	_, _, r := newTestRouter(t, cfg)
 
-	body := `{"device_id":"AMS000001","group":"org-1001","product_model":"V9","hardware_version":"1.0"}`
+	body := `{"device_id":"AMS000001","current_version":"v2.3.0"}`
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/device/v1/check-update", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -61,10 +73,10 @@ func TestDeviceCheckUpdate_AuthEnabled_MissingBearer(t *testing.T) {
 	}
 }
 
-func TestDeviceCheckUpdate_MissingRequiredFields(t *testing.T) {
+func TestDeviceCheckUpdate_MissingDeviceID(t *testing.T) {
 	_, _, r := newTestRouter(t, defaultTestConfig())
 
-	body := `{"device_id":"AMS000001","group":"org-1001"}`
+	body := `{"current_version":"v2.3.0"}`
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/device/v1/check-update", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -84,7 +96,7 @@ func TestDeviceCheckUpdate_NoRunningTask(t *testing.T) {
 		"failure_threshold", "state", "created_at", "canary_percent", "schedule_time", "force_upgrade",
 	}))
 
-	body := `{"device_id":"AMS000001","group":"org-1001","product_model":"V9","hardware_version":"1.0","current_version":"v2.3.0"}`
+	body := `{"device_id":"AMS000001","current_version":"v2.3.0"}`
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/device/v1/check-update", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -103,16 +115,45 @@ func TestDeviceCheckUpdate_NoRunningTask(t *testing.T) {
 	}
 }
 
+func TestDeviceCheckUpdate_PerDeviceAuthSuccess(t *testing.T) {
+	cfg := defaultTestConfig()
+	cfg.Auth.DeviceAPIAuthEnabled = true
+	_, mock, r := newTestRouter(t, cfg)
+
+	body := []byte(`{"device_id":"AMS000001","current_version":"v2.3.0"}`)
+	auth := deviceAuthHeader("AMS000001", "device-secret-1", http.MethodPost, "/device/v1/check-update", body)
+
+	mockDeviceAuthCredential(mock, "AMS000001", "device-secret-1", "active")
+	mockDeviceRegistry(mock, "AMS000001", "org-1001", "V9", "1.0", "v2.3.0", "v2.3.0")
+	mock.ExpectQuery(`FROM t_release_task t`).WillReturnRows(sqlmock.NewRows([]string{
+		"task_id", "package_id", "target_group", "product_model", "hardware_version",
+		"failure_threshold", "state", "created_at", "canary_percent", "schedule_time", "force_upgrade",
+	}))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/device/v1/check-update", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+}
+
 func TestDeviceReportStatus_MissingTaskID(t *testing.T) {
 	cfg := defaultTestConfig()
 	cfg.Auth.DeviceAPIAuthEnabled = true
-	_, _, r := newTestRouter(t, cfg)
+	_, mock, r := newTestRouter(t, cfg)
 
-	body := `{"device_id":"AMS000001","status":"downloading"}`
+	body := []byte(`{"device_id":"AMS000001","status":"downloading"}`)
+	auth := deviceAuthHeader("AMS000001", "device-secret-1", http.MethodPost, "/device/v1/report-status", body)
+	mockDeviceAuthCredential(mock, "AMS000001", "device-secret-1", "active")
+
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/device/v1/report-status", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/device/v1/report-status", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer shared-token")
+	req.Header.Set("Authorization", auth)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
@@ -123,16 +164,37 @@ func TestDeviceReportStatus_MissingTaskID(t *testing.T) {
 func TestDeviceReportStatus_InvalidStatus(t *testing.T) {
 	cfg := defaultTestConfig()
 	cfg.Auth.DeviceAPIAuthEnabled = true
-	_, _, r := newTestRouter(t, cfg)
+	_, mock, r := newTestRouter(t, cfg)
 
-	body := `{"device_id":"AMS000001","task_id":"task-1","status":"unknown"}`
+	body := []byte(`{"device_id":"AMS000001","task_id":"task-1","status":"unknown"}`)
+	auth := deviceAuthHeader("AMS000001", "device-secret-1", http.MethodPost, "/device/v1/report-status", body)
+	mockDeviceAuthCredential(mock, "AMS000001", "device-secret-1", "active")
+
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/device/v1/report-status", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/device/v1/report-status", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer shared-token")
+	req.Header.Set("Authorization", auth)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSetDeviceSecret_NotFound(t *testing.T) {
+	_, mock, r := newTestRouter(t, defaultTestConfig())
+	mock.ExpectExec(`UPDATE t_device SET device_secret`).
+		WithArgs("AMS000001", "secret-1").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	body := `{"device_secret":"secret-1"}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/devices/AMS000001/device-secret", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", bearerHeader())
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
 }

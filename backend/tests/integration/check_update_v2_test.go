@@ -19,7 +19,7 @@ func TestDeviceCheckUpdate_ReadOnly_AlreadyLatestWhenStoredAheadOfRequest(t *tes
 	mockRunningTasksForDevice(mock, "AMS000001", "task-1", "pkg-1")
 	mockPackageDetail(mock, "pkg-1", "v2.4.0")
 
-	body := `{"device_id":"AMS000001","group":"org-1001","product_model":"V9","hardware_version":"1.0","current_version":"v2.3.0"}`
+	body := `{"device_id":"AMS000001","current_version":"v2.3.0"}`
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/device/v1/check-update", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -55,7 +55,7 @@ func TestDeviceCheckUpdate_HasUpdate_DownloadURLUsesPublicHost(t *testing.T) {
 	mockRunningTasksForDevice(mock, "AMS000001", "task-1", "pkg-test")
 	mockPackageDetail(mock, "pkg-test", "v2.4.0")
 
-	body := `{"device_id":"AMS000001","group":"org-1001","product_model":"V9","hardware_version":"1.0","current_version":"v2.3.0"}`
+	body := `{"device_id":"AMS000001","current_version":"v2.3.0"}`
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/device/v1/check-update", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")

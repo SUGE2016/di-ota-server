@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -660,6 +659,39 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": mapDeviceRegistry(device)})
 		})
 
+		api.PUT("/devices/:device_id/device-secret", func(c *gin.Context) {
+			if !hasBearer(c.GetHeader("Authorization")) {
+				c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
+				return
+			}
+			deviceID := strings.TrimSpace(c.Param("device_id"))
+			if deviceID == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "device_id is required"})
+				return
+			}
+			var req struct {
+				DeviceSecret string `json:"device_secret"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "invalid request"})
+				return
+			}
+			secret := strings.TrimSpace(req.DeviceSecret)
+			if secret == "" || len(secret) > 128 {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "device_secret is required and must be <= 128 chars"})
+				return
+			}
+			if err := q.SetDeviceSecret(c.Request.Context(), deviceID, secret); err != nil {
+				if err == sql.ErrNoRows {
+					c.JSON(http.StatusNotFound, gin.H{"code": 2004, "message": "device not found"})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "set device secret failed"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"device_id": deviceID, "provisioned": true}})
+		})
+
 		api.PATCH("/packages/:package_id/status", func(c *gin.Context) {
 			if !hasBearer(c.GetHeader("Authorization")) {
 				c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
@@ -1119,114 +1151,27 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 		})
 
 		device.POST("/check-update", func(c *gin.Context) {
-			if !requireDeviceAPIAuth(c, cfg) {
-				return
-			}
-			handleCheckUpdate(c, cfg, q)
-		})
-
-		device.POST("/report-status", func(c *gin.Context) {
-			if !requireDeviceAPIAuth(c, cfg) {
-				return
-			}
-
-			var req struct {
-				DeviceID      string `json:"device_id"`
-				TaskID        string `json:"task_id"`
-				Status        string `json:"status"`
-				SourceVersion string `json:"source_version"`
-				TargetVersion string `json:"target_version"`
-				ErrorCode     string `json:"error_code"`
-				ErrorMessage  string `json:"error_message"`
-			}
-			if err := c.ShouldBindJSON(&req); err != nil {
+			rawBody, err := readRequestBody(c)
+			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "invalid request"})
 				return
 			}
-
-			if req.DeviceID == "" || req.TaskID == "" || req.Status == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "device_id/task_id/status are required"})
+			if !requireDeviceAuth(c, cfg, q, rawBody) {
 				return
 			}
+			handleCheckUpdate(c, cfg, q, rawBody)
+		})
 
-			normalizedStatus, ok := normalizeUpgradeStatus(req.Status)
-			if !ok {
-				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "invalid status"})
-				return
-			}
-
-			idemKey := c.GetHeader("X-Idempotency-Key")
-			if idemKey == "" {
-				idemKey = fmt.Sprintf("%s:%s:%s", req.DeviceID, req.TaskID, normalizedStatus)
-			}
-
-			if existing, err := q.GetIdempotency(c.Request.Context(), idemKey); err == nil {
-				var out gin.H
-				if json.Unmarshal(existing.Response, &out) == nil {
-					if normalizedStatus == "Success" {
-						ensureDeviceReportedVersion(c.Request.Context(), q, req.DeviceID, req.TargetVersion)
-					}
-					c.JSON(http.StatusOK, out)
-					return
-				}
-			}
-
-			prevStatus, err := q.GetUpgradeRecordStatus(c.Request.Context(), req.DeviceID, req.TaskID)
+		device.POST("/report-status", func(c *gin.Context) {
+			rawBody, err := readRequestBody(c)
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query previous status failed"})
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "invalid request"})
 				return
 			}
-			if !canTransitUpgradeStatus(prevStatus.String, normalizedStatus) {
-				c.JSON(http.StatusConflict, gin.H{"code": 2005, "message": "invalid status transition", "data": gin.H{"previous": prevStatus.String, "current": normalizedStatus}})
+			if !requireDeviceAuth(c, cfg, q, rawBody) {
 				return
 			}
-
-			if _, err := q.UpsertUpgradeRecord(c.Request.Context(), store.UpsertUpgradeRecordParams{
-				DeviceID:      req.DeviceID,
-				TaskID:        req.TaskID,
-				Status:        normalizedStatus,
-				SourceVersion: strings.TrimSpace(req.SourceVersion),
-				TargetVersion: strings.TrimSpace(req.TargetVersion),
-				ErrorCode:     strings.TrimSpace(req.ErrorCode),
-			}); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "upsert upgrade record failed"})
-				return
-			}
-
-			if normalizedStatus == "Success" {
-				ensureDeviceReportedVersion(c.Request.Context(), q, req.DeviceID, req.TargetVersion)
-			}
-
-			if normalizedStatus == "Success" || normalizedStatus == "Failed" {
-				logAlertError(UpsertUpgradeStatusAlert(c.Request.Context(), q, req.DeviceID, req.TaskID, normalizedStatus, strings.TrimSpace(req.TargetVersion)))
-				EmitUpgradeWebhookAsync(cfg, req.DeviceID, req.TaskID, normalizedStatus, strings.TrimSpace(req.SourceVersion), strings.TrimSpace(req.TargetVersion))
-			}
-
-			respData := gin.H{
-				"idempotency_key": idemKey,
-				"status":          normalizedStatus,
-				"source_version":  strings.TrimSpace(req.SourceVersion),
-				"target_version":  strings.TrimSpace(req.TargetVersion),
-				"error_code":      strings.TrimSpace(req.ErrorCode),
-			}
-			if msg := strings.TrimSpace(req.ErrorMessage); msg != "" {
-				respData["error_message"] = msg
-			}
-
-			respObj := gin.H{"code": 0, "message": "Status received", "data": respData}
-			respBytes, _ := json.Marshal(respObj)
-			idem, err := q.CreateIdempotency(c.Request.Context(), store.CreateIdempotencyParams{IdemKey: idemKey, Response: respBytes})
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "save idempotency failed"})
-				return
-			}
-
-			var out gin.H
-			if err := json.Unmarshal(idem.Response, &out); err != nil {
-				c.JSON(http.StatusOK, respObj)
-				return
-			}
-			c.JSON(http.StatusOK, out)
+			handleReportStatus(c, cfg, q, rawBody)
 		})
 	}
 
@@ -1239,33 +1184,6 @@ func hasBearer(header string) bool {
 	}
 	parts := strings.SplitN(header, " ", 2)
 	return len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && strings.TrimSpace(parts[1]) != ""
-}
-
-func requireDeviceAPIAuth(c *gin.Context, cfg *config.Config) bool {
-	if !cfg.Auth.DeviceAPIAuthEnabled {
-		return true
-	}
-
-	expected := strings.TrimSpace(cfg.Auth.DeviceAPIToken)
-	if expected == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "device api token is not configured"})
-		return false
-	}
-
-	header := c.GetHeader("Authorization")
-	if !hasBearer(header) {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
-		return false
-	}
-
-	parts := strings.SplitN(header, " ", 2)
-	provided := strings.TrimSpace(parts[1])
-	if subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
-		return false
-	}
-
-	return true
 }
 
 func operatorFromBearer(header string, cfg *config.Config) (string, bool) {

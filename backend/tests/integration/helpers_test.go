@@ -43,7 +43,6 @@ func defaultTestConfig() *config.Config {
 			LocalAdminUsername:   "admin",
 			LocalAdminPassHash:   "$2a$12$A3La56.CqRH4oiOoMjnsGuwcgPv.h5xByKaYYGK/tfi4FWtbS9V4S",
 			DeviceAPIAuthEnabled: false,
-			DeviceAPIToken:       "shared-token",
 		},
 		S3: config.S3Config{
 			PublicBaseURL:   "http://localhost:9000/ota-packages",

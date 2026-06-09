@@ -11,11 +11,8 @@ import (
 )
 
 type checkUpdateRequest struct {
-	DeviceID        string `json:"device_id"`
-	Group           string `json:"group"`
-	ProductModel    string `json:"product_model"`
-	HardwareVersion string `json:"hardware_version"`
-	CurrentVersion  string `json:"current_version"`
+	DeviceID       string `json:"device_id"`
+	CurrentVersion string `json:"current_version"`
 }
 
 func noUpgradeResponse(c *gin.Context, reason string, retryAfterSec int, currentVersion string) {
@@ -34,20 +31,16 @@ func noUpgradeResponse(c *gin.Context, reason string, retryAfterSec int, current
 	})
 }
 
-func handleCheckUpdate(c *gin.Context, cfg *config.Config, q *store.Queries) {
+func handleCheckUpdate(c *gin.Context, cfg *config.Config, q *store.Queries, rawBody []byte) {
 	var req checkUpdateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSONBody(rawBody, &req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "invalid request"})
 		return
 	}
 	req.DeviceID = strings.TrimSpace(req.DeviceID)
-	req.Group = strings.TrimSpace(req.Group)
-	req.ProductModel = strings.TrimSpace(req.ProductModel)
-	req.HardwareVersion = strings.TrimSpace(req.HardwareVersion)
 	req.CurrentVersion = strings.TrimSpace(req.CurrentVersion)
-
-	if req.DeviceID == "" || req.Group == "" || req.ProductModel == "" || req.HardwareVersion == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "device_id/group/product_model/hardware_version are required"})
+	if req.DeviceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "device_id is required"})
 		return
 	}
 
@@ -68,22 +61,14 @@ func handleCheckUpdate(c *gin.Context, cfg *config.Config, q *store.Queries) {
 		})
 		return
 	}
-	if dev.DeviceGroup != req.Group || dev.ProductModel != req.ProductModel || dev.HardwareVersion != req.HardwareVersion {
-		c.JSON(http.StatusConflict, gin.H{
-			"code":    2006,
-			"message": "identity_mismatch",
-			"data": gin.H{
-				"has_update":      false,
-				"reason":          "identity_mismatch",
-				"retry_after_sec": 3600,
-			},
-		})
-		return
-	}
 
-	reported := policyReportedVersion(dev.ReportedVersion, dev.CatalogVersion, req.CurrentVersion)
+	executeCheckUpdateFromRegistry(c, cfg, q, dev, req.CurrentVersion)
+}
 
-	tasks, err := q.ListRunningTasksForDevice(c.Request.Context(), req.DeviceID)
+func executeCheckUpdateFromRegistry(c *gin.Context, cfg *config.Config, q *store.Queries, dev store.DeviceRegistry, currentVersion string) {
+	reported := policyReportedVersion(dev.ReportedVersion, dev.CatalogVersion, currentVersion)
+
+	tasks, err := q.ListRunningTasksForDevice(c.Request.Context(), dev.DeviceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query tasks failed"})
 		return
@@ -96,7 +81,7 @@ func handleCheckUpdate(c *gin.Context, cfg *config.Config, q *store.Queries) {
 	var matched *store.TReleaseTask
 	for i := range tasks {
 		candidate := tasks[i]
-		if !inCanaryRange(req.DeviceID, candidate.TaskID, candidate.CanaryPercent) {
+		if !inCanaryRange(dev.DeviceID, candidate.TaskID, candidate.CanaryPercent) {
 			continue
 		}
 		matched = &candidate

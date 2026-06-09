@@ -50,42 +50,29 @@ func TestValidateOIDCState_Expired(t *testing.T) {
 	}
 }
 
-func TestRequireDeviceAPIAuth_Disabled(t *testing.T) {
+func TestRequireDeviceAuth_Disabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPost, "/device/v1/check-update", nil)
 
 	cfg := &config.Config{Auth: config.AuthConfig{DeviceAPIAuthEnabled: false}}
-	if ok := requireDeviceAPIAuth(c, cfg); !ok {
-		t.Fatalf("requireDeviceAPIAuth() = false, want true when auth disabled")
+	if ok := requireDeviceAuth(c, cfg, nil, []byte(`{"device_id":"AMS000001"}`)); !ok {
+		t.Fatalf("requireDeviceAuth() = false, want true when auth disabled")
 	}
 }
 
-func TestRequireDeviceAPIAuth_MissingBearer(t *testing.T) {
+func TestRequireDeviceAuth_MissingHeader(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPost, "/device/v1/check-update", nil)
 
-	cfg := &config.Config{Auth: config.AuthConfig{DeviceAPIAuthEnabled: true, DeviceAPIToken: "shared-token"}}
-	if ok := requireDeviceAPIAuth(c, cfg); ok {
-		t.Fatalf("requireDeviceAPIAuth() = true, want false when bearer is missing")
+	cfg := &config.Config{Auth: config.AuthConfig{DeviceAPIAuthEnabled: true}}
+	if ok := requireDeviceAuth(c, cfg, nil, []byte(`{"device_id":"AMS000001"}`)); ok {
+		t.Fatalf("requireDeviceAuth() = true, want false when authorization is missing")
 	}
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
-	}
-}
-
-func TestRequireDeviceAPIAuth_ValidBearer(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPost, "/device/v1/check-update", nil)
-	c.Request.Header.Set("Authorization", "Bearer shared-token")
-
-	cfg := &config.Config{Auth: config.AuthConfig{DeviceAPIAuthEnabled: true, DeviceAPIToken: "shared-token"}}
-	if ok := requireDeviceAPIAuth(c, cfg); !ok {
-		t.Fatalf("requireDeviceAPIAuth() = false, want true for valid bearer token")
 	}
 }

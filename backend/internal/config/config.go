@@ -59,14 +59,14 @@ type S3Config struct {
 }
 
 type AuthConfig struct {
-	JWTSecret                string
-	DeviceSigningSecret      string
-	DeviceAPIAuthEnabled     bool
-	DeviceAPIToken           string
-	DeviceDownloadHMACEnabled bool
-	LocalAuthEnabled         bool
-	LocalAdminUsername       string
-	LocalAdminPassHash       string
+	JWTSecret                       string
+	DeviceSigningSecret             string
+	DeviceAPIAuthEnabled            bool
+	DeviceAuthTimestampToleranceSec int64
+	DeviceDownloadHMACEnabled       bool
+	LocalAuthEnabled                bool
+	LocalAdminUsername              string
+	LocalAdminPassHash              string
 }
 
 type OIDCConfig struct {
@@ -127,11 +127,11 @@ func Load() (*Config, error) {
 			SignedURLTTLSec: getEnvInt64("S3_SIGNED_URL_TTL_SEC", 600),
 		},
 		Auth: AuthConfig{
-			JWTSecret:                 getEnv("JWT_SECRET", "change-me-jwt-secret"),
-			DeviceSigningSecret:       getEnv("DEVICE_SIGNING_SECRET", "change-me-device-secret"),
-			DeviceAPIAuthEnabled:      getEnv("DEVICE_API_AUTH_ENABLED", "false") == "true",
-			DeviceAPIToken:            getEnv("DEVICE_API_TOKEN", ""),
-			DeviceDownloadHMACEnabled: getEnv("DEVICE_DOWNLOAD_HMAC_ENABLED", "false") == "true",
+			JWTSecret:                       getEnv("JWT_SECRET", "change-me-jwt-secret"),
+			DeviceSigningSecret:             getEnv("DEVICE_SIGNING_SECRET", "change-me-device-secret"),
+			DeviceAPIAuthEnabled:            getEnv("DEVICE_API_AUTH_ENABLED", "false") == "true",
+			DeviceAuthTimestampToleranceSec: getEnvInt64("DEVICE_AUTH_TIMESTAMP_TOLERANCE_SEC", 300),
+			DeviceDownloadHMACEnabled:       getEnv("DEVICE_DOWNLOAD_HMAC_ENABLED", "false") == "true",
 			LocalAuthEnabled:          getEnv("LOCAL_AUTH_ENABLED", "false") == "true",
 			LocalAdminUsername:        getEnv("LOCAL_ADMIN_USERNAME", "admin"),
 			LocalAdminPassHash:        getEnv("LOCAL_ADMIN_PASSWORD_HASH", ""),

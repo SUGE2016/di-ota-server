@@ -70,6 +70,39 @@ func (q *Queries) GetDeviceRegistry(ctx context.Context, deviceID string) (Devic
 	return d, nil
 }
 
+type DeviceAuthCredential struct {
+	DeviceID         string
+	DeviceSecret     string
+	EligibilityState string
+}
+
+func (q *Queries) GetDeviceAuthCredential(ctx context.Context, deviceID string) (DeviceAuthCredential, error) {
+	row := q.db.QueryRowContext(ctx, `
+SELECT device_id, device_secret, eligibility_state
+FROM t_device WHERE device_id = $1
+`, deviceID)
+	var cred DeviceAuthCredential
+	err := row.Scan(&cred.DeviceID, &cred.DeviceSecret, &cred.EligibilityState)
+	return cred, err
+}
+
+func (q *Queries) SetDeviceSecret(ctx context.Context, deviceID, secret string) error {
+	res, err := q.db.ExecContext(ctx, `
+UPDATE t_device SET device_secret = $2 WHERE device_id = $1
+`, deviceID, secret)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 type InsertDeviceRegistryParams struct {
 	DeviceID         string
 	DeviceGroup      string

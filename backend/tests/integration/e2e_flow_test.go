@@ -73,11 +73,8 @@ func TestE2E03_DeviceUpgradeFlow(t *testing.T) {
 	taskID := taskOut["data"].(map[string]any)["task_id"].(string)
 
 	status, checkOut := e2eJSON(t, http.MethodPost, base+"/device/v1/check-update", "", map[string]any{
-		"device_id":        "AMS000001",
-		"group":            "org-1001",
-		"product_model":    "V9",
-		"hardware_version": "1.0",
-		"current_version":  "v2.3",
+		"device_id":       "AMS000001",
+		"current_version": "v2.3",
 	})
 	if status != http.StatusOK {
 		t.Fatalf("check-update status=%d out=%v", status, checkOut)
@@ -163,11 +160,8 @@ func TestE2E04_TaskPauseStopsCheckUpdate(t *testing.T) {
 	}
 
 	status, checkOut := e2eJSON(t, http.MethodPost, base+"/device/v1/check-update", "", map[string]any{
-		"device_id":        "AMS000001",
-		"group":            "org-1001",
-		"product_model":    "V9",
-		"hardware_version": "1.0",
-		"current_version":  "v2.3",
+		"device_id":       "AMS000001",
+		"current_version": "v2.3",
 	})
 	if status != http.StatusOK {
 		t.Fatalf("check-update status=%d out=%v", status, checkOut)
