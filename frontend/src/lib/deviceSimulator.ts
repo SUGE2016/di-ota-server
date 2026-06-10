@@ -1,10 +1,7 @@
 export type DeviceConfig = {
   deviceId: string;
-  group: string;
-  productModel: string;
-  hardwareVersion: string;
   currentVersion: string;
-  apiToken: string;
+  deviceSecret: string;
 };
 
 type ApiEnvelope<T = unknown> = {
@@ -46,12 +43,66 @@ function formatDeviceApiError(parsed: ApiEnvelope): DeviceApiError {
   return new DeviceApiError(parsed.code, `code=${parsed.code} ${parsed.message}`, data);
 }
 
-async function devicePost<T>(path: string, body: unknown, token: string): Promise<ApiEnvelope<T>> {
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function hmacSha256Base64Url(secret: string, payload: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  const bytes = new Uint8Array(sig);
+  let binary = '';
+  bytes.forEach((b) => {
+    binary += String.fromCharCode(b);
+  });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function buildDeviceAuthHeader(
+  deviceId: string,
+  secret: string,
+  method: string,
+  apiPath: string,
+  body: string,
+): Promise<string> {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const bodyHash = await sha256Hex(body);
+  const payload = `${timestamp}\n${method.toUpperCase()}\n${apiPath}\n${bodyHash}`;
+  const signature = await hmacSha256Base64Url(secret, payload);
+  return `Device device_id=${deviceId},timestamp=${timestamp},signature=${signature}`;
+}
+
+const deviceFetchPath = (suffix: string) =>
+  `${import.meta.env.BASE_URL}device/v1${suffix}`.replace(/\/{2,}/g, '/');
+
+async function devicePost<T>(
+  fetchPath: string,
+  signPath: string,
+  body: Record<string, unknown>,
+  cfg: DeviceConfig,
+): Promise<ApiEnvelope<T>> {
+  const rawBody = JSON.stringify(body);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token.trim()) {
-    headers.Authorization = `Bearer ${token.trim()}`;
+  const secret = cfg.deviceSecret.trim();
+  if (secret) {
+    headers.Authorization = await buildDeviceAuthHeader(
+      cfg.deviceId.trim(),
+      secret,
+      'POST',
+      signPath,
+      rawBody,
+    );
   }
-  const res = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
+  const res = await fetch(fetchPath, { method: 'POST', headers, body: rawBody });
   const raw = await res.text();
   let parsed: ApiEnvelope<T>;
   try {
@@ -68,30 +119,34 @@ async function devicePost<T>(path: string, body: unknown, token: string): Promis
   return parsed;
 }
 
-const deviceApi = (path: string) =>
-  `${import.meta.env.BASE_URL}device/v1${path}`.replace(/\/{2,}/g, '/');
-
 export async function checkUpdate(cfg: DeviceConfig) {
-  return devicePost<CheckUpdateData>(deviceApi('/check-update'), {
-    device_id: cfg.deviceId,
-    group: cfg.group,
-    product_model: cfg.productModel,
-    hardware_version: cfg.hardwareVersion,
-    current_version: cfg.currentVersion,
-  }, cfg.apiToken);
+  return devicePost<CheckUpdateData>(
+    deviceFetchPath('/check-update'),
+    '/device/v1/check-update',
+    {
+      device_id: cfg.deviceId,
+      current_version: cfg.currentVersion,
+    },
+    cfg,
+  );
 }
 
 export async function reportStatus(
   cfg: DeviceConfig,
   payload: { taskId: string; status: string; targetVersion: string; sourceVersion?: string },
 ) {
-  return devicePost(deviceApi('/report-status'), {
-    device_id: cfg.deviceId,
-    task_id: payload.taskId,
-    status: payload.status,
-    source_version: payload.sourceVersion ?? cfg.currentVersion,
-    target_version: payload.targetVersion,
-  }, cfg.apiToken);
+  return devicePost(
+    deviceFetchPath('/report-status'),
+    '/device/v1/report-status',
+    {
+      device_id: cfg.deviceId,
+      task_id: payload.taskId,
+      status: payload.status,
+      source_version: payload.sourceVersion ?? cfg.currentVersion,
+      target_version: payload.targetVersion,
+    },
+    cfg,
+  );
 }
 
 export const UPGRADE_STATUS_STEPS = ['pending', 'downloading', 'downloaded', 'upgrading', 'success'] as const;

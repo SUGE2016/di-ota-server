@@ -12,7 +12,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   UPGRADE_STATUS_STEPS,
   checkUpdate,
@@ -35,11 +35,8 @@ type LogEntry = {
 
 const defaultConfig: DeviceConfig = {
   deviceId: 'AMS000001',
-  group: 'org-1001',
-  productModel: 'V9',
-  hardwareVersion: '1.0',
   currentVersion: 'v2.3.0',
-  apiToken: '',
+  deviceSecret: '',
 };
 
 function appendLog(prev: LogEntry[], title: string, body: unknown, ok: boolean, idRef: { n: number }) {
@@ -70,11 +67,8 @@ export function DeviceSimulatorPage() {
     const v = form.getFieldsValue();
     return {
       deviceId: v.deviceId,
-      group: v.group,
-      productModel: v.productModel,
-      hardwareVersion: v.hardwareVersion,
       currentVersion: v.currentVersion,
-      apiToken: v.apiToken || '',
+      deviceSecret: v.deviceSecret || '',
     };
   };
 
@@ -161,7 +155,7 @@ export function DeviceSimulatorPage() {
         <div>
           <Title level={3} style={{ margin: 0 }}>OTA 设备端模拟器</Title>
           <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            模拟设备调用 check-update / report-status，用于联调升级链路。
+            模拟设备调用 check-update / report-status（per-device HMAC 签名），用于联调升级链路。
           </Paragraph>
         </div>
         <Link to="/devices">返回设备管理</Link>
@@ -170,6 +164,13 @@ export function DeviceSimulatorPage() {
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={10}>
           <Card title="设备参数" className="ota-card">
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message="生产环境说明"
+              description="DEVICE_API_AUTH_ENABLED=true 时须填写与平台一致的 device_secret；签名 path 为 /device/v1/...（不含 /ota 前缀）。"
+            />
             <Alert
               type="info"
               showIcon
@@ -185,20 +186,11 @@ export function DeviceSimulatorPage() {
               <Form.Item name="deviceId" label="device_id" rules={[{ required: true }]}>
                 <Input />
               </Form.Item>
-              <Form.Item name="group" label="group" rules={[{ required: true }]}>
-                <Input />
-              </Form.Item>
-              <Form.Item name="productModel" label="product_model" rules={[{ required: true }]}>
-                <Input />
-              </Form.Item>
-              <Form.Item name="hardwareVersion" label="hardware_version" rules={[{ required: true }]}>
-                <Input />
-              </Form.Item>
               <Form.Item name="currentVersion" label="current_version">
                 <Input />
               </Form.Item>
-              <Form.Item name="apiToken" label="Bearer Token（可选）">
-                <Input.Password placeholder="DEVICE_API_TOKEN" />
+              <Form.Item name="deviceSecret" label="device_secret" rules={[{ required: true, message: '请填写 device_secret' }]}>
+                <Input.Password placeholder="与平台 provision 一致" />
               </Form.Item>
               <Form.Item name="tryDownload" label="完整流程时尝试下载" valuePropName="checked">
                 <Switch />

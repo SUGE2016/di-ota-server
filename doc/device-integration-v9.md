@@ -46,7 +46,9 @@
 - 检查更新：`POST <OTA_API_PUBLIC_URL>/device/v1/check-update`
 - 上报状态：`POST <OTA_API_PUBLIC_URL>/device/v1/report-status`
 
-联调时可使用管理台内置模拟器：`http://<console-host>/#/simulator`（需 OTA 服务已启动）。
+**demogo 示例：** `https://demogo.work/ota/device/v1/check-update`（经 Caddy 子路径；签名 path 仍为 `/device/v1/check-update`）。
+
+联调时可使用管理台内置模拟器：`https://demogo.work/ota/#/simulator`（填写 `device_id` + `device_secret`，自动 HMAC 签名）。
 
 ---
 
@@ -61,7 +63,8 @@ DEVICE_API_AUTH_ENABLED=true
 DEVICE_AUTH_TIMESTAMP_TOLERANCE_SEC=300
 ```
 
-本地联调可设 `DEVICE_API_AUTH_ENABLED=false` 跳过签名校验。
+> **与 OAuth/SSO 无关**：设备 API 不使用管理台 OIDC token；`device_secret` 由产线烧录 + 平台 provision。  
+> 仅本地开发可设 `DEVICE_API_AUTH_ENABLED=false` 跳过签名校验；**demogo / 生产须为 `true`**。
 
 ### 3.2 请求头
 

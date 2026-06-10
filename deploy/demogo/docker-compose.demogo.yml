@@ -1,4 +1,4 @@
-# demogo.work 专用：127.0.0.1 端口 + Caddy 网络，不启 Keycloak（本地登录）
+# demogo.work 专用：127.0.0.1 端口 + Caddy 网络；不启 Keycloak（OIDC 可选）
 name: ota-server-prod
 
 services:

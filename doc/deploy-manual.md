@@ -198,6 +198,45 @@ GHCR 没有官方国内节点，可在 `.env` 替换 `OTA_IMAGE_REGISTRY`（CI �
 
 **CI：** 工作流见 `.github/workflows/build-images.yml`；`push` 到 `main` / `feat/**` 或打 `v*` tag 时构建三镜像。PR 仅 build 不 push。
 
+### 3.8 demogo.work 演示环境（生产对齐）
+
+`deploy/demogo/docker-compose.demogo.yml` 用于在 **demogo.work** 入口墙下以子路径 `/ota/` 部署，**不启 Keycloak**（OIDC 与生产一样为可选）。
+
+| 项 | demogo 配置 | 生产对齐说明 |
+|----|-------------|--------------|
+| 入口 | Caddy `handle_path /ota/*` → `ota-console` | 子路径需 console 镜像 `base: /ota/` |
+| 编排 | `/opt/di-ota` + `docker-compose.demogo.yml` | 独立 stack，不占用装箱 DB 5432 |
+| 设备鉴权 | `DEVICE_API_AUTH_ENABLED=true` | 与生产一致，per-device HMAC |
+| 管理台登录 | `LOCAL_AUTH_ENABLED=true`，`OIDC_ENABLED=false` | OIDC **可选**；demogo 用本地账号 |
+| 公网 API | `API_PUBLIC_BASE_URL=https://demogo.work/ota` | 设备/浏览器经 Caddy 访问 |
+
+**启动概要：**
+
+```bash
+# 服务器 /opt/di-ota
+cp .env.prod.example .env   # 合并 .env.example 业务项
+# 必填：OTA_IMAGE_TAG、JWT/DEVICE 密钥、POSTGRES/MINIO 密码
+# demogo 关键项：
+#   DEVICE_API_AUTH_ENABLED=true
+#   LOCAL_AUTH_ENABLED=true
+#   OIDC_ENABLED=false
+#   API_PUBLIC_BASE_URL=https://demogo.work/ota
+
+docker compose -f docker-compose.demogo.yml up -d
+```
+
+**设备 secret provision（生产必做，demogo 同样）：**
+
+```bash
+# 管理员登录后
+curl -X PUT "https://demogo.work/ota/api/v1/devices/<SN>/device-secret" \
+  -H "Authorization: Bearer <jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{"device_secret":"<每台唯一 secret>"}'
+```
+
+管理台模拟器：`https://demogo.work/ota/#/simulator`，填写相同 `device_id` 与 `device_secret` 做 HMAC 联调。
+
 ---
 
 ## 4. Kubernetes 部署说明
@@ -331,7 +370,7 @@ Content-Type: application/json
 
 | 变量 | 说明 |
 |------|------|
-| `OIDC_ENABLED` | 是否启用 SSO |
+| `OIDC_ENABLED` | 是否启用 SSO | 可选；未接 IdP 时 `false`，用本地登录 |
 | `OIDC_ISSUER_URL` | IdP issuer |
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | OAuth 客户端 |
 | `OIDC_REDIRECT_URL` | 回调 URL（须与 IdP 注册一致） |
@@ -347,7 +386,7 @@ Content-Type: application/json
 | `API_PORT` | 默认 8080 |
 | `API_AUTO_MIGRATE_ON_START` | 生产建议 `false`，用 Job 跑迁移 |
 | `WORKER_TASK_STATS_RETENTION_HOURS` | 任务统计快照保留，默认 168（7 天） |
-| `LOCAL_AUTH_ENABLED` | 本地账号登录，生产通常 `false`，走 OIDC |
+| `LOCAL_AUTH_ENABLED` | 本地账号登录 | OIDC 未启用时 `true`；已接 SSO 时可 `false` |
 
 ### 4.6 部署顺序建议
 
@@ -423,7 +462,8 @@ K8s 可封装为 `Job`，在 api 启动前跑完；失败则阻止发布。
 - [ ] `DEVICE_API_AUTH_ENABLED=true`
 - [ ] 每台设备已 `PUT .../device-secret` provision
 - [ ] Ingress 限流与签名失败告警已配置
-- [ ] `OIDC_MOCK_ENABLED=false`，`LOCAL_AUTH_ENABLED=false`（或仅 break-glass）
+- [ ] `OIDC_MOCK_ENABLED=false`；若未接 IdP 则 `OIDC_ENABLED=false` 且 `LOCAL_AUTH_ENABLED=true`
+- [ ] 若已接企业 IdP：`OIDC_ENABLED=true`，`LOCAL_AUTH_ENABLED=false`（或保留 break-glass 本地账号）
 - [ ] `S3_PUBLIC_BASE_URL` 为设备可达的 HTTPS 地址
 - [ ] Ingress 启用 TLS
 - [ ] 数据库、Redis、RabbitMQ 不对公网暴露
