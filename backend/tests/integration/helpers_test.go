@@ -60,8 +60,22 @@ func bearerHeader() string {
 	return "Bearer integration-test-token"
 }
 
-func loginBearer(t *testing.T, r *gin.Engine) string {
+func mockLocalUserLogin(mock sqlmock.Sqlmock, username, passwordHash, userID string) {
+	now := time.Now()
+	mock.ExpectQuery(`FROM t_user u`).
+		WithArgs(username).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"user_id", "username", "display_name", "password_hash", "status", "auth_source",
+			"last_login_at", "last_operation_at", "created_at", "updated_at", "roles",
+		}).AddRow(userID, username, username, passwordHash, "enabled", "local", nil, now, now, now, []byte(`["admin"]`)))
+	mock.ExpectExec(`UPDATE t_user`).
+		WithArgs(userID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+}
+
+func loginBearer(t *testing.T, mock sqlmock.Sqlmock, r *gin.Engine) string {
 	t.Helper()
+	mockLocalUserLogin(mock, "admin", "$2a$12$A3La56.CqRH4oiOoMjnsGuwcgPv.h5xByKaYYGK/tfi4FWtbS9V4S", "user-bootstrap-local-admin")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin","password":"Admin@123456"}`))
 	req.Header.Set("Content-Type", "application/json")

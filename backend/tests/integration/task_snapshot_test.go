@@ -16,7 +16,7 @@ import (
 func TestReleaseTaskResume_BuildsSnapshot(t *testing.T) {
 	cfg := defaultTestConfig()
 	_, mock, r := newTestRouter(t, cfg)
-	auth := loginBearer(t, r)
+	auth := loginBearer(t, mock, r)
 
 	taskID := "task-resume-1"
 	now := time.Now()

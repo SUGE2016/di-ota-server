@@ -159,6 +159,38 @@ WHERE ($1 = '' OR u.username ILIKE '%' || $1 || '%' OR u.display_name ILIKE '%' 
   return count, err
 }
 
+func (q *Queries) GetUserByUsername(ctx context.Context, username string) (UserRecord, error) {
+  row := q.db.QueryRowContext(ctx, `
+SELECT
+  u.user_id,
+  u.username,
+  u.display_name,
+  u.password_hash,
+  u.status,
+  u.auth_source,
+  u.last_login_at,
+  u.last_operation_at,
+  u.created_at,
+  u.updated_at,
+  COALESCE(json_agg(ur.role_code ORDER BY ur.role_code) FILTER (WHERE ur.role_code IS NOT NULL), '[]'::json) AS roles
+FROM t_user u
+LEFT JOIN t_user_role ur ON ur.user_id = u.user_id
+WHERE LOWER(u.username) = LOWER($1)
+GROUP BY u.user_id, u.username, u.display_name, u.password_hash, u.status, u.auth_source,
+         u.last_login_at, u.last_operation_at, u.created_at, u.updated_at
+`, username)
+  return scanUserWithRoles(row)
+}
+
+func (q *Queries) TouchUserLastLogin(ctx context.Context, userID string) error {
+  _, err := q.db.ExecContext(ctx, `
+UPDATE t_user
+SET last_login_at = NOW(), updated_at = NOW()
+WHERE user_id = $1
+`, userID)
+  return err
+}
+
 func (q *Queries) GetUserByID(ctx context.Context, userID string) (UserRecord, error) {
   row := q.db.QueryRowContext(ctx, `
 SELECT

@@ -77,10 +77,6 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 					c.JSON(http.StatusServiceUnavailable, gin.H{"code": 1002, "message": "local auth is disabled"})
 					return
 				}
-				if strings.TrimSpace(cfg.Auth.LocalAdminPassHash) == "" {
-					c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "local auth password hash is not configured"})
-					return
-				}
 
 				var req struct {
 					Username string `json:"username"`
@@ -90,18 +86,45 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 					c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "invalid request"})
 					return
 				}
-				if !strings.EqualFold(strings.TrimSpace(req.Username), strings.TrimSpace(cfg.Auth.LocalAdminUsername)) {
+				username := strings.TrimSpace(req.Username)
+				if username == "" {
+					c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "invalid request"})
+					return
+				}
+
+				user, err := q.GetUserByUsername(c.Request.Context(), username)
+				if err != nil {
+					if err == sql.ErrNoRows {
+						c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "invalid username or password"})
+						return
+					}
+					c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query user failed"})
+					return
+				}
+				if user.AuthSource != "local" {
 					c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "invalid username or password"})
 					return
 				}
-				if err := bcrypt.CompareHashAndPassword([]byte(cfg.Auth.LocalAdminPassHash), []byte(req.Password)); err != nil {
+				if user.Status != "enabled" {
+					c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "invalid username or password"})
+					return
+				}
+				if strings.TrimSpace(user.PasswordHash) == "" {
+					c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "invalid username or password"})
+					return
+				}
+				if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 					c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "invalid username or password"})
 					return
 				}
 
-				token, err := issueJWT(cfg, cfg.Auth.LocalAdminUsername)
+				token, err := issueJWT(cfg, user.Username)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "issue token failed"})
+					return
+				}
+				if err := q.TouchUserLastLogin(c.Request.Context(), user.UserID); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "update login time failed"})
 					return
 				}
 				c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"access_token": token, "token_type": "Bearer"}})

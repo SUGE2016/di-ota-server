@@ -15,7 +15,7 @@ import (
 
 func TestAlerts_ListAndAcknowledge(t *testing.T) {
 	_, mock, r := newTestRouter(t, defaultTestConfig())
-	bearer := loginBearer(t, r)
+	bearer := loginBearer(t, mock, r)
 	now := time.Now()
 
 	mock.ExpectQuery(`FROM t_alert`).
