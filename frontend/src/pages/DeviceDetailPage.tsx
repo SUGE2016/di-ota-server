@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Breadcrumb, Button, Card, Descriptions, Space, Tag, Timeline, Typography, message } from 'antd';
+import { Alert, Breadcrumb, Button, Card, Descriptions, Form, Input, Space, Tag, Timeline, Typography, message } from 'antd';
+import { ApiOutlined, KeyOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DeviceCatalogItem, UpgradeRecord, deviceAPI } from '../api';
 
@@ -25,21 +26,48 @@ export function DeviceDetailPage() {
   const [device, setDevice] = useState<DeviceCatalogItem | null>(null);
   const [records, setRecords] = useState<UpgradeRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [secretForm] = Form.useForm<{ device_secret: string }>();
+  const [savingSecret, setSavingSecret] = useState(false);
+
+  const loadDevice = async (deviceId: string) => {
+    const [dev, history] = await Promise.all([
+      deviceAPI.get(deviceId),
+      deviceAPI.upgradeRecords(deviceId),
+    ]);
+    setDevice(dev);
+    setRecords(history.records);
+  };
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    Promise.all([
-      deviceAPI.get(id),
-      deviceAPI.upgradeRecords(id),
-    ])
-      .then(([dev, history]) => {
-        setDevice(dev);
-        setRecords(history.records);
-      })
+    loadDevice(id)
       .catch((e: Error) => message.error(e.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  const handleSaveSecret = async (values: { device_secret: string }) => {
+    if (!id) return;
+    const secret = values.device_secret.trim();
+    setSavingSecret(true);
+    try {
+      await deviceAPI.setSecret(id, secret);
+      setDevice((prev) => (prev ? { ...prev, secret_provisioned: true } : prev));
+      message.success('device_secret 已写入平台。请复制下方 secret 到设备固件或模拟器（页面不会再次显示）。');
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingSecret(false);
+    }
+  };
+
+  const handleGenerateSecret = () => {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    const secret = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    secretForm.setFieldsValue({ device_secret: secret });
+    message.info('已生成随机 secret，请点击「保存到平台」后复制到模拟器');
+  };
 
   if (loading) {
     return null;
@@ -116,6 +144,50 @@ export function DeviceDetailPage() {
           )}
         </Card>
       )}
+
+      <Card className="ota-card" title="设备鉴权 Secret (HMAC)" style={{ marginBottom: 16 }}>
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="CSV 导入不含 device_secret"
+          description="设备 CSV 仅注册 SN 与型号信息。每台设备须在此单独 provision secret，并与产线烧录 / 模拟器填写值一致。平台不会回显已有 secret。"
+        />
+        <Descriptions bordered column={{ xs: 1, sm: 2 }} size="small" style={{ marginBottom: 16 }}>
+          <Descriptions.Item label="Provision 状态">
+            <Tag color={device.secret_provisioned ? 'green' : 'orange'}>
+              {device.secret_provisioned ? '已配置' : '未配置'}
+            </Tag>
+          </Descriptions.Item>
+          <Descriptions.Item label="设备 API 鉴权">
+            Authorization: Device device_id=...,timestamp=...,signature=...
+          </Descriptions.Item>
+        </Descriptions>
+        <Form form={secretForm} layout="vertical" onFinish={handleSaveSecret}>
+          <Form.Item
+            name="device_secret"
+            label="写入 / 更新 device_secret"
+            rules={[
+              { required: true, message: '请输入 device_secret' },
+              { max: 128, message: '最长 128 字符' },
+            ]}
+            extra="保存成功后请立即复制；刷新页面或离开后将无法从平台回读明文。"
+          >
+            <Input.Password placeholder="输入新 secret（保存后覆盖旧值）" visibilityToggle />
+          </Form.Item>
+          <Space wrap>
+            <Button icon={<KeyOutlined />} onClick={handleGenerateSecret}>
+              生成随机 Secret
+            </Button>
+            <Button type="primary" htmlType="submit" loading={savingSecret}>
+              保存到平台
+            </Button>
+            <Button icon={<ApiOutlined />} onClick={() => navigate('/simulator')}>
+              打开设备模拟器
+            </Button>
+          </Space>
+        </Form>
+      </Card>
 
       <Card className="ota-card" title="设备概览">
         <Descriptions bordered column={{ xs: 1, sm: 2 }}>

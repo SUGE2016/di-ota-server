@@ -25,12 +25,14 @@ type DeviceRegistry struct {
 	LastSeenAt         sql.NullTime
 	LastHeartbeat      time.Time
 	RegisteredAt       time.Time
+	SecretProvisioned  bool
 }
 
 const deviceRegistrySelect = `
 SELECT device_id, device_group, product_model, hardware_version, product_code, tags,
        current_version, reported_version, catalog_version, catalog_synced_at, catalog_source,
-       eligibility_state, inconsistency_flags, last_seen_at, registered_at, last_heartbeat
+       eligibility_state, inconsistency_flags, last_seen_at, registered_at, last_heartbeat,
+       (device_secret <> '') AS secret_provisioned
 FROM t_device
 `
 
@@ -53,6 +55,7 @@ func scanDeviceRegistry(row scanner) (DeviceRegistry, error) {
 		&d.LastSeenAt,
 		&d.RegisteredAt,
 		&d.LastHeartbeat,
+		&d.SecretProvisioned,
 	)
 	return d, err
 }
@@ -128,7 +131,8 @@ INSERT INTO t_device (
 )
 RETURNING device_id, device_group, product_model, hardware_version, product_code, tags,
           current_version, reported_version, catalog_version, catalog_synced_at, catalog_source,
-          eligibility_state, inconsistency_flags, last_seen_at, registered_at, last_heartbeat
+          eligibility_state, inconsistency_flags, last_seen_at, registered_at, last_heartbeat,
+          (device_secret <> '') AS secret_provisioned
 `, arg.DeviceID, arg.DeviceGroup, arg.ProductModel, arg.HardwareVersion, arg.ProductCode, arg.Tags,
 		arg.CurrentVersion, arg.ReportedVersion, arg.CatalogVersion, arg.CatalogSource, arg.InconsistencyFlags)
 	return scanDeviceRegistry(row)
@@ -166,7 +170,8 @@ UPDATE t_device SET
 WHERE device_id = $1
 RETURNING device_id, device_group, product_model, hardware_version, product_code, tags,
           current_version, reported_version, catalog_version, catalog_synced_at, catalog_source,
-          eligibility_state, inconsistency_flags, last_seen_at, registered_at, last_heartbeat
+          eligibility_state, inconsistency_flags, last_seen_at, registered_at, last_heartbeat,
+          (device_secret <> '') AS secret_provisioned
 `, arg.DeviceID, arg.DeviceGroup, arg.ProductModel, arg.HardwareVersion, arg.ProductCode, arg.Tags,
 		arg.CatalogVersion, arg.ReportedVersion, arg.CurrentVersion, arg.CatalogSource, arg.InconsistencyFlags)
 	return scanDeviceRegistry(row)

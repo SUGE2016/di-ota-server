@@ -145,6 +145,7 @@ func mapDeviceRegistry(d store.DeviceRegistry) gin.H {
 		"registered_at":       d.RegisteredAt,
 		"catalog_synced_at":   nullTimeJSON(d.CatalogSyncedAt),
 		"last_seen_at":          nullTimeJSON(d.LastSeenAt),
+		"secret_provisioned":  d.SecretProvisioned,
 	}
 	if !d.LastHeartbeat.IsZero() {
 		item["last_heartbeat"] = d.LastHeartbeat

@@ -105,6 +105,11 @@ export function DevicesPage() {
     tableEllipsisColumn<DeviceCatalogItem>('OTA 上报', 'reported_version', {
       render: (v) => (v ? String(v) : '-'),
     }),
+    tableCompactColumn<DeviceCatalogItem>('Secret', 'secret_provisioned', (_: unknown, record: DeviceCatalogItem) => (
+      <Tag color={record.secret_provisioned ? 'green' : 'orange'}>
+        {record.secret_provisioned ? '已配置' : '未配置'}
+      </Tag>
+    )),
     tableCompactColumn<DeviceCatalogItem>('状态', 'status', (_: unknown, record: DeviceCatalogItem) => {
       const flags = record.inconsistency_flags ?? [];
       if (record.eligibility_state === 'blocked') {

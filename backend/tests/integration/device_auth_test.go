@@ -23,7 +23,8 @@ func mockDeviceRegistry(mock sqlmock.Sqlmock, deviceID, group, model, hw, report
 			"device_id", "device_group", "product_model", "hardware_version", "product_code", "tags",
 			"current_version", "reported_version", "catalog_version", "catalog_synced_at", "catalog_source",
 			"eligibility_state", "inconsistency_flags", "last_seen_at", "registered_at", "last_heartbeat",
-		}).AddRow(deviceID, group, model, hw, "AMS", []byte(`{}`), reported, reported, catalog, now, "csv", "active", []byte(`[]`), now, now, now))
+			"secret_provisioned",
+		}).AddRow(deviceID, group, model, hw, "AMS", []byte(`{}`), reported, reported, catalog, now, "csv", "active", []byte(`[]`), now, now, now, true))
 }
 
 func mockDeviceAuthCredential(mock sqlmock.Sqlmock, deviceID, secret, eligibility string) {

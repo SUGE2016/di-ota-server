@@ -81,6 +81,7 @@ export interface DeviceCatalogItem {
   tags: Record<string, unknown>;
   inconsistency_flags?: string[];
   registered_at: string;
+  secret_provisioned?: boolean;
 }
 
 export interface UpgradeRecord {
@@ -233,6 +234,10 @@ export const deviceAPI = {
     );
   },
   downloadTemplate: () => api.get('/devices/csv-template', { responseType: 'blob' }),
+  setSecret: (id: string, deviceSecret: string) =>
+    wrap<{ device_id: string; provisioned: boolean }>(
+      api.put(`/devices/${id}/device-secret`, { device_secret: deviceSecret })
+    ),
 };
 
 export interface AlertItem {

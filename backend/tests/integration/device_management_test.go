@@ -22,7 +22,8 @@ func TestAdminDevicesList_FilterByGroupAndModel(t *testing.T) {
 			"device_id", "device_group", "product_model", "hardware_version", "product_code", "tags",
 			"current_version", "reported_version", "catalog_version", "catalog_synced_at", "catalog_source",
 			"eligibility_state", "inconsistency_flags", "last_seen_at", "registered_at", "last_heartbeat",
-		}).AddRow("AMS000001", "org-1001", "V9", "1.0", "AMS", []byte(`{}`), "v2.3", "v2.3", "v2.3", now, "csv", "active", []byte(`[]`), now, now, now))
+			"secret_provisioned",
+		}).AddRow("AMS000001", "org-1001", "V9", "1.0", "AMS", []byte(`{}`), "v2.3", "v2.3", "v2.3", now, "csv", "active", []byte(`[]`), now, now, now, false))
 
 	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM t_device`).
 		WithArgs("", "org-1001", "V9", "", "", false).
@@ -64,6 +65,7 @@ func TestAdminDevicesList_AbnormalFilter(t *testing.T) {
 			"device_id", "device_group", "product_model", "hardware_version", "product_code", "tags",
 			"current_version", "reported_version", "catalog_version", "catalog_synced_at", "catalog_source",
 			"eligibility_state", "inconsistency_flags", "last_seen_at", "registered_at", "last_heartbeat",
+			"secret_provisioned",
 		}))
 
 	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM t_device`).
