@@ -11,13 +11,23 @@ import { DevicesPage } from './pages/DevicesPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { UserDetailPage } from './pages/UserDetailPage';
 import { DeviceDetailPage } from './pages/DeviceDetailPage';
+import { DeviceSecretsPage } from './pages/DeviceSecretsPage';
 import { DeviceSimulatorPage } from './pages/DeviceSimulatorPage';
 import useAuthStore from './stores/authStore';
+import { canManageDeviceSecrets } from './utils/roles';
 
 function PrivateRoute() {
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   if (!isLoggedIn) {
     return <Navigate to="/login" replace />;
+  }
+  return <Outlet />;
+}
+
+function SecretAdminRoute() {
+  const roles = useAuthStore((s) => s.roles);
+  if (!canManageDeviceSecrets(roles)) {
+    return <Navigate to="/dashboard" replace />;
   }
   return <Outlet />;
 }
@@ -35,6 +45,9 @@ export const router = createHashRouter([
         { path: '/users/:id', element: <UserDetailPage /> },
         { path: '/devices', element: <DevicesPage /> },
         { path: '/devices/:id', element: <DeviceDetailPage /> },
+        { element: <SecretAdminRoute />, children: [
+          { path: '/device-secrets', element: <DeviceSecretsPage /> },
+        ]},
         { path: '/alerts', element: <AlertsPage /> },
         { path: '/packages', element: <PackagesPage /> },
         { path: '/packages/:id', element: <PackageDetailPage /> },

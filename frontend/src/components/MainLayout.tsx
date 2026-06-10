@@ -1,25 +1,28 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Avatar, Button, Typography, Space, Tag } from 'antd';
-import { DashboardOutlined, BoxPlotOutlined, ThunderboltOutlined, LogoutOutlined, UserOutlined, TeamOutlined, LaptopOutlined, AlertOutlined } from '@ant-design/icons';
+import { DashboardOutlined, BoxPlotOutlined, ThunderboltOutlined, LogoutOutlined, UserOutlined, TeamOutlined, LaptopOutlined, AlertOutlined, KeyOutlined } from '@ant-design/icons';
 import useAuthStore from '../stores/authStore';
 import { APP_VERSION_LABEL, COPYRIGHT_HOLDER } from '../constants/version';
 import { menuKeyForPath, pageMetaForPath } from '../constants/pageMeta';
 import { OtaLogo } from './OtaLogo';
+import { canManageDeviceSecrets } from '../utils/roles';
 
 const { Sider, Header, Content } = Layout;
 const { Text } = Typography;
 
 const roleLabels: Record<string, string> = {
   admin: '管理员',
+  secret_admin: 'Secret 管理员',
   release: '发布工程师',
   readonly: '只读',
   audit: '审计',
 };
 
-const menuItems = [
+const allMenuItems = [
   { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' },
   { key: '/users', icon: <TeamOutlined />, label: '用户管理' },
   { key: '/devices', icon: <LaptopOutlined />, label: '设备管理' },
+  { key: '/device-secrets', icon: <KeyOutlined />, label: '设备 Secret 管理' },
   { key: '/alerts', icon: <AlertOutlined />, label: '告警中心' },
   { key: '/packages', icon: <BoxPlotOutlined />, label: '固件包' },
   { key: '/tasks', icon: <ThunderboltOutlined />, label: '发布任务' },
@@ -35,6 +38,9 @@ export function MainLayout() {
 
   const { title: pageTitle, subtitle: pageSubtitle } = pageMetaForPath(location.pathname);
   const activeMenuKey = menuKeyForPath(location.pathname);
+  const menuItems = allMenuItems.filter((item) =>
+    item.key === '/device-secrets' ? canManageDeviceSecrets(roles) : true,
+  );
 
   const handleLogout = () => {
     logout();

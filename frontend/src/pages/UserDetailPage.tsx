@@ -171,6 +171,7 @@ export function UserDetailPage() {
               mode="multiple"
               options={[
                 { label: '管理员', value: 'admin' },
+                { label: 'Secret 管理员', value: 'secret_admin' },
                 { label: '发布工程师', value: 'release' },
                 { label: '只读', value: 'readonly' },
                 { label: '审计', value: 'audit' },

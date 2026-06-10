@@ -29,10 +29,11 @@ import (
 )
 
 var allowedUserRoles = map[string]struct{}{
-	"admin":    {},
-	"release":  {},
-	"readonly": {},
-	"audit":    {},
+	"admin":        {},
+	"secret_admin": {},
+	"release":      {},
+	"readonly":     {},
+	"audit":        {},
 }
 
 var taskStateTransition = map[string]map[string]string{
@@ -634,6 +635,65 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"total_rows": len(rows), "imported_count": len(rows), "failed_count": 0, "errors": []deviceCSVRowError{}}})
 		})
 
+		api.GET("/device-secrets/csv-template", func(c *gin.Context) {
+			if _, ok := requireSecretAdmin(c, cfg, q); !ok {
+				return
+			}
+			c.Header("Content-Type", "text/csv; charset=utf-8")
+			c.Header("Content-Disposition", `attachment; filename="ota-device-secret-template.csv"`)
+			c.String(http.StatusOK, deviceSecretCSVTemplate)
+		})
+
+		api.POST("/device-secrets/import-csv", func(c *gin.Context) {
+			if _, ok := requireSecretAdmin(c, cfg, q); !ok {
+				return
+			}
+
+			fileHeader, err := c.FormFile("file")
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "csv file is required"})
+				return
+			}
+			if fileHeader.Size > 2*1024*1024 {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "csv file is too large"})
+				return
+			}
+
+			file, err := fileHeader.Open()
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "open csv file failed"})
+				return
+			}
+			defer file.Close()
+
+			rows, rowErrors, err := parseDeviceSecretCSV(file)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": err.Error()})
+				return
+			}
+			if len(rowErrors) > 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "csv validation failed", "data": gin.H{
+					"total_rows": len(rows) + len(rowErrors), "imported_count": 0, "failed_count": len(rowErrors), "errors": rowErrors,
+				}})
+				return
+			}
+
+			for _, row := range rows {
+				if err := q.SetDeviceSecret(c.Request.Context(), row.DeviceID, row.DeviceSecret); err != nil {
+					if err == sql.ErrNoRows {
+						c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": "device not found", "data": gin.H{"device_id": row.DeviceID}})
+						return
+					}
+					c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "set device secret failed", "data": gin.H{"device_id": row.DeviceID}})
+					return
+				}
+			}
+
+			c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{
+				"total_rows": len(rows), "imported_count": len(rows), "failed_count": 0, "errors": []deviceCSVRowError{},
+			}})
+		})
+
 		api.GET("/devices/:device_id/upgrade-records", func(c *gin.Context) {
 			if !hasBearer(c.GetHeader("Authorization")) {
 				c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
@@ -683,8 +743,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 		})
 
 		api.PUT("/devices/:device_id/device-secret", func(c *gin.Context) {
-			if !hasBearer(c.GetHeader("Authorization")) {
-				c.JSON(http.StatusUnauthorized, gin.H{"code": 1001, "message": "unauthorized"})
+			if _, ok := requireSecretAdmin(c, cfg, q); !ok {
 				return
 			}
 			deviceID := strings.TrimSpace(c.Param("device_id"))

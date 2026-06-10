@@ -406,10 +406,21 @@ curl -s -X POST "$BASE/api/v1/devices/import-csv" \
 
 **步骤 2 — 为 SN 写入 device_secret（与产线烧录值一致）**
 
+> 须 **secret_admin** 或 **admin** 角色；与设备目录 CSV 导入权限分离。
+
+管理台：**设备 Secret 管理** → 单台写入或上传 `device_id,device_secret` CSV。
+
 ```bash
 curl -s -X PUT -H "Authorization: Bearer $JWT" -H "Content-Type: application/json" \
   -d '{"device_secret":"your-32byte-secret"}' \
   "$BASE/api/v1/devices/AMS000001/device-secret"
+```
+
+批量：
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $JWT" -F file=@device_secrets.csv \
+  "$BASE/api/v1/device-secrets/import-csv"
 ```
 
 未 provision 时设备 API 返回 **403 / code 2007**。

@@ -61,16 +61,20 @@ func bearerHeader() string {
 }
 
 func mockLocalUserLogin(mock sqlmock.Sqlmock, username, passwordHash, userID string) {
+	mockAuthUser(mock, username, userID, passwordHash, "enabled", `["admin"]`)
+	mock.ExpectExec(`UPDATE t_user`).
+		WithArgs(userID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+}
+
+func mockAuthUser(mock sqlmock.Sqlmock, username, userID, passwordHash, status, rolesJSON string) {
 	now := time.Now()
 	mock.ExpectQuery(`FROM t_user u`).
 		WithArgs(username).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"user_id", "username", "display_name", "password_hash", "status", "auth_source",
 			"last_login_at", "last_operation_at", "created_at", "updated_at", "roles",
-		}).AddRow(userID, username, username, passwordHash, "enabled", "local", nil, now, now, now, []byte(`["admin"]`)))
-	mock.ExpectExec(`UPDATE t_user`).
-		WithArgs(userID).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+		}).AddRow(userID, username, username, passwordHash, status, "local", nil, now, now, now, []byte(rolesJSON)))
 }
 
 func loginBearer(t *testing.T, mock sqlmock.Sqlmock, r *gin.Engine) string {

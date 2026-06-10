@@ -32,6 +32,7 @@ func main() {
 			"migrations/005_architecture_v2.sql",
 			"migrations/006_alerts.sql",
 			"migrations/007_device_secret.sql",
+			"migrations/008_secret_admin_role.sql",
 		} {
 			if err := db.ApplySchema(pg, f); err != nil {
 				log.Fatalf("apply schema %s failed: %v", f, err)

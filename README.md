@@ -72,10 +72,19 @@
 | 管理台 / 运维 | `Authorization: Bearer <JWT>`（登录或 SSO） |
 | V9 设备 / 模拟器 | `Authorization: Device device_id=...,timestamp=...,signature=...` |
 
+管理台角色（可组合）：
+
+| 角色 | 能力 |
+|------|------|
+| `admin` | 全部能力 |
+| `secret_admin` | 仅 device_secret provision（独立页面 + API） |
+| `release` | 包/任务/设备目录，**无** secret 写入 |
+| `readonly` / `audit` | 只读 |
+
 流程概要：
 
 1. **CSV 导入设备**（注册 SN，不含 secret）
-2. **管理台 → 设备详情 →「设备鉴权 Secret」** 写入 `device_secret`（或 `PUT /api/v1/devices/:id/device-secret`）
+2. **管理台 → 设备 Secret 管理**（`secret_admin` / `admin`）写入 secret，或 `PUT .../device-secret` / `POST .../device-secrets/import-csv`
 3. 设备固件 / Web 模拟器 / CLI 模拟器使用**相同** secret 做 HMAC 签名
 
 详细算法与错误码见 [`doc/device-integration-v9.md`](doc/device-integration-v9.md) §3。

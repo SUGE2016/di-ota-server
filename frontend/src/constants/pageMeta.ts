@@ -13,6 +13,10 @@ const LIST_META: Record<string, PageMeta> = {
     title: '设备管理',
     subtitle: '通过 CSV 导入第三方设备清单，作为 OTA 任务选设备的影子目录。',
   },
+  '/device-secrets': {
+    title: '设备 Secret 管理',
+    subtitle: '独立 provision device_secret（secret_admin）；与设备目录 CSV 权限分离。',
+  },
   '/alerts': {
     title: '告警中心',
     subtitle: '任务熔断与设备升级异常事件，支持确认与关闭。',
@@ -48,6 +52,7 @@ const DETAIL_META: Record<string, PageMeta> = {
 
 export function menuKeyForPath(pathname: string): string {
   if (pathname.startsWith('/users')) return '/users';
+  if (pathname.startsWith('/device-secrets')) return '/device-secrets';
   if (pathname.startsWith('/devices')) return '/devices';
   if (pathname.startsWith('/packages')) return '/packages';
   if (pathname.startsWith('/tasks')) return '/tasks';

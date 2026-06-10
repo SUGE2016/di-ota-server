@@ -234,10 +234,26 @@ export const deviceAPI = {
     );
   },
   downloadTemplate: () => api.get('/devices/csv-template', { responseType: 'blob' }),
+};
+
+export interface DeviceSecretCSVImportResult {
+  total_rows: number;
+  imported_count: number;
+  failed_count: number;
+  errors: Array<{ row: number; message: string }>;
+}
+
+export const deviceSecretAPI = {
   setSecret: (id: string, deviceSecret: string) =>
     wrap<{ device_id: string; provisioned: boolean }>(
       api.put(`/devices/${id}/device-secret`, { device_secret: deviceSecret })
     ),
+  importCSV: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return wrap<DeviceSecretCSVImportResult>(api.post('/device-secrets/import-csv', form));
+  },
+  downloadTemplate: () => api.get('/device-secrets/csv-template', { responseType: 'blob' }),
 };
 
 export interface AlertItem {

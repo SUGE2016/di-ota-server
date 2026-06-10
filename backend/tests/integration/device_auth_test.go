@@ -184,6 +184,8 @@ func TestDeviceReportStatus_InvalidStatus(t *testing.T) {
 
 func TestSetDeviceSecret_NotFound(t *testing.T) {
 	_, mock, r := newTestRouter(t, defaultTestConfig())
+	auth := loginBearer(t, mock, r)
+	mockAuthUser(mock, "admin", "user-bootstrap-local-admin", "$2a$12$A3La56.CqRH4oiOoMjnsGuwcgPv.h5xByKaYYGK/tfi4FWtbS9V4S", "enabled", `["admin"]`)
 	mock.ExpectExec(`UPDATE t_device SET device_secret`).
 		WithArgs("AMS000001", "secret-1").
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -192,10 +194,27 @@ func TestSetDeviceSecret_NotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/devices/AMS000001/device-secret", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", bearerHeader())
+	req.Header.Set("Authorization", auth)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSetDeviceSecret_ForbiddenWithoutSecretAdminRole(t *testing.T) {
+	_, mock, r := newTestRouter(t, defaultTestConfig())
+	auth := loginBearer(t, mock, r)
+	mockAuthUser(mock, "admin", "user-bootstrap-local-admin", "$2a$12$A3La56.CqRH4oiOoMjnsGuwcgPv.h5xByKaYYGK/tfi4FWtbS9V4S", "enabled", `["release"]`)
+
+	body := `{"device_secret":"secret-1"}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/devices/AMS000001/device-secret", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
 }
