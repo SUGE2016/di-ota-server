@@ -145,6 +145,59 @@ docker compose down -v
 | minio | minio | — |
 | minio-init | minio/mc | minio |
 
+### 3.7 生产 Compose（GHCR 镜像）
+
+自有服务由 GitHub Actions 构建并推送到 GHCR，生产环境使用 `docker-compose.prod.yml` 拉取镜像，**不再挂载源码**。
+
+**镜像命名：**
+
+| 服务 | 镜像 |
+|------|------|
+| ota-api | `ghcr.io/suge2016/di-ota-api:<tag>` |
+| ota-worker | `ghcr.io/suge2016/di-ota-worker:<tag>` |
+| ota-console | `ghcr.io/suge2016/di-ota-console:<tag>` |
+
+**启动步骤：**
+
+```bash
+cp .env.prod.example .env
+# 合并 .env.example 中的业务密钥到 .env
+
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml ps
+curl -fsS http://localhost:8080/healthz
+```
+
+**镜像版本变量（`.env`）：**
+
+| 变量 | 说明 | 默认 |
+|------|------|------|
+| `OTA_IMAGE_REGISTRY` |  registry 前缀（含 owner） | `ghcr.io/suge2016` |
+| `OTA_IMAGE_TAG` | 标签 | `latest` |
+
+示例：`OTA_IMAGE_TAG=sha-1b1dfc1` 锁定某次 CI 构建。
+
+**国内拉取 GHCR（无公司内网 mirror 时建议）：**
+
+GHCR 没有官方国内节点，可在 `.env` 替换 `OTA_IMAGE_REGISTRY`（CI 仍推官方 `ghcr.io`，仅**部署拉取**走代理）：
+
+| 优先级 | `OTA_IMAGE_REGISTRY` | 说明 |
+|--------|----------------------|------|
+| 1 | `ghcr.dockerproxy.com/suge2016` | DockerProxy，将 `ghcr.io` 换为 `ghcr.dockerproxy.com` |
+| 2 | `docker.1ms.run/ghcr.io/suge2016` | 1ms 拉取代理，保留 `ghcr.io` 路径 |
+| 3 | `ghcr.io/suge2016` | 直连（海外或网络良好） |
+
+验证：`docker pull ${OTA_IMAGE_REGISTRY}/di-ota-api:${OTA_IMAGE_TAG}`
+
+> 第三方代理非 GitHub 官方，可用性可能变化；生产稳定后建议 ACR 同步或自建 pull-through。
+
+**Docker Hub 中间件加速（postgres/redis/minio 等）：**
+
+与 GHCR 无关，在宿主机 `/etc/docker/daemon.json` 配置 `registry-mirrors`（如 `https://docker.1ms.run`、`https://docker.m.daocloud.io`），修改后 `sudo systemctl restart docker`。
+
+**CI：** 工作流见 `.github/workflows/build-images.yml`；`push` 到 `main` / `feat/**` 或打 `v*` tag 时构建三镜像。PR 仅 build 不 push。
+
 ---
 
 ## 4. Kubernetes 部署说明
