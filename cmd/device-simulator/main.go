@@ -2,6 +2,10 @@ package main
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -21,23 +25,17 @@ type apiResp struct {
 func main() {
 	baseURL := flag.String("url", "http://localhost:8080", "OTA API base URL")
 	deviceID := flag.String("device-id", "AMS000001", "device_id (sn)")
-	group := flag.String("group", "org-1001", "device_group")
-	model := flag.String("model", "V9", "product_model")
-	hw := flag.String("hw", "1.0", "hardware_version")
+	deviceSecret := flag.String("device-secret", "", "device_secret for HMAC (required when DEVICE_API_AUTH_ENABLED=true)")
 	version := flag.String("version", "v2.3.0", "current_version")
-	token := flag.String("token", "", "Bearer token (DEVICE_API_TOKEN)")
 	skipDownload := flag.Bool("skip-download", true, "skip HTTP download step")
 	dryRun := flag.Bool("dry-run", false, "only check-update")
 	flag.Parse()
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	authHeader := ""
-	if strings.TrimSpace(*token) != "" {
-		authHeader = "Bearer " + strings.TrimSpace(*token)
-	}
+	secret := strings.TrimSpace(*deviceSecret)
 
 	fmt.Println("==> check-update")
-	checkData, err := checkUpdate(client, *baseURL, authHeader, *deviceID, *group, *model, *hw, *version)
+	checkData, err := checkUpdate(client, *baseURL, secret, *deviceID, *version)
 	if err != nil {
 		fatalf("check-update: %v", err)
 	}
@@ -83,7 +81,7 @@ func main() {
 			"source_version": *version,
 			"target_version": targetVersion,
 		}
-		resp, err := postJSON(client, *baseURL+"/device/v1/report-status", authHeader, body)
+		resp, err := postJSON(client, *baseURL+"/device/v1/report-status", secret, "/device/v1/report-status", body)
 		if err != nil {
 			fatalf("report-status %s: %v", step.status, err)
 		}
@@ -105,26 +103,23 @@ func main() {
 	fmt.Println("upgrade simulation completed")
 }
 
-func checkUpdate(client *http.Client, baseURL, authHeader, deviceID, group, model, hw, version string) (json.RawMessage, error) {
+func checkUpdate(client *http.Client, baseURL, secret, deviceID, version string) (json.RawMessage, error) {
 	body := map[string]string{
-		"device_id":         deviceID,
-		"group":             group,
-		"product_model":     model,
-		"hardware_version":  hw,
-		"current_version":   version,
+		"device_id":       deviceID,
+		"current_version": version,
 	}
-	return postJSON(client, baseURL+"/device/v1/check-update", authHeader, body)
+	return postJSON(client, baseURL+"/device/v1/check-update", secret, "/device/v1/check-update", body)
 }
 
-func postJSON(client *http.Client, url, authHeader string, body any) (json.RawMessage, error) {
+func postJSON(client *http.Client, url, secret, signPath string, body any) (json.RawMessage, error) {
 	payload, _ := json.Marshal(body)
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if authHeader != "" {
-		req.Header.Set("Authorization", authHeader)
+	if secret != "" {
+		req.Header.Set("Authorization", buildDeviceAuthHeader(secret, signPath, payload))
 	}
 	res, err := client.Do(req)
 	if err != nil {
@@ -143,6 +138,26 @@ func postJSON(client *http.Client, url, authHeader string, body any) (json.RawMe
 		return nil, fmt.Errorf("code=%d message=%s", wrapped.Code, wrapped.Message)
 	}
 	return wrapped.Data, nil
+}
+
+func buildDeviceAuthHeader(secret, path string, body []byte) string {
+	deviceID := parseDeviceID(body)
+	timestamp := time.Now().Unix()
+	sum := sha256.Sum256(body)
+	bodyHash := hex.EncodeToString(sum[:])
+	payload := fmt.Sprintf("%d\nPOST\n%s\n%s", timestamp, path, bodyHash)
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(payload))
+	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return fmt.Sprintf("Device device_id=%s,timestamp=%d,signature=%s", deviceID, timestamp, signature)
+}
+
+func parseDeviceID(body []byte) string {
+	var payload struct {
+		DeviceID string `json:"device_id"`
+	}
+	_ = json.Unmarshal(body, &payload)
+	return strings.TrimSpace(payload.DeviceID)
 }
 
 func printJSON(title string, data json.RawMessage) {

@@ -85,7 +85,7 @@ Content-Type: application/json
 <body_hash>
 ```
 
-示例 path：`/device/v1/check-update`（与真实请求路径一致，含前缀）。
+示例 path：`/device/v1/check-update`（**API 路由 path**，不含控制台子路径前缀如 `/ota`；与 §2 demogo 说明一致）。
 
 3. 计算签名：`signature = Base64URL( HMAC-SHA256(device_secret, payload) )`
 
@@ -309,7 +309,7 @@ pending → downloading → downloaded → verifying → upgrading → success
 | HTTP | code | 含义 |
 |------|------|------|
 | 400 | 1002 | 缺字段或非法 status |
-| 401 | 1001 | Token 错误 |
+| 401 | 1001 | 签名错误、时间戳过期、或 header/body 的 device_id 不一致 |
 | 409 | 2005 | 非法状态迁移（见上） |
 
 ---
@@ -389,16 +389,39 @@ pending → downloading → downloaded → verifying → upgrading → success
 
 ## 10. 联调与验收
 
-### 10.1 冒烟（需先 provision secret）
+### 10.1 冒烟（需先注册设备 + provision secret）
+
+**步骤 1 — 管理端登录并导入设备**
 
 ```bash
-# 运维：为 SN 写入 secret（管理端 JWT）
-curl -X PUT -H "Authorization: Bearer $ADMIN_JWT" -H "Content-Type: application/json" \
-  -d '{"device_secret":"your-32byte-secret"}' \
-  https://<OTA_API_PUBLIC_URL>/api/v1/devices/AMS000001/device-secret
+# 本地 dev：http://localhost:8080 ；demogo：https://demogo.work/ota
+BASE=http://localhost:8080
+JWT=$(curl -s -X POST "$BASE/api/v1/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"Admin@123456"}' | jq -r '.data.access_token')
+
+curl -s -X POST "$BASE/api/v1/devices/import-csv" \
+  -H "Authorization: Bearer $JWT" -F "file=@devices.csv"
 ```
 
-设备侧按 §3.3 构造 `Authorization: Device ...` 后调用接口。
+**步骤 2 — 为 SN 写入 device_secret（与产线烧录值一致）**
+
+```bash
+curl -s -X PUT -H "Authorization: Bearer $JWT" -H "Content-Type: application/json" \
+  -d '{"device_secret":"your-32byte-secret"}' \
+  "$BASE/api/v1/devices/AMS000001/device-secret"
+```
+
+未 provision 时设备 API 返回 **403 / code 2007**。
+
+**步骤 3 — 设备侧 HMAC 调用**
+
+按 §3.3 构造 `Authorization: Device device_id=...,timestamp=...,signature=...`，请求体仅含 `device_id` + `current_version`。
+
+联调入口：
+
+- Web 模拟器（自动签名）：`http://localhost:5173/#/simulator` 或 `https://demogo.work/ota/#/simulator`
+- CLI：`go run ./cmd/device-simulator -url $BASE -device-id AMS000001 -device-secret your-32byte-secret -dry-run`
 
 ### 10.2 验收清单
 
