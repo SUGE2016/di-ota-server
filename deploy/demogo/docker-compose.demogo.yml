@@ -1,0 +1,127 @@
+# demogo.work 专用：127.0.0.1 端口 + Caddy 网络，不启 Keycloak（本地登录）
+name: ota-server-prod
+
+services:
+  ota-api:
+    image: ${OTA_IMAGE_REGISTRY:-ghcr.io/suge2016}/di-ota-api:${OTA_IMAGE_TAG:-latest}
+    container_name: ota-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NO_PROXY: minio,localhost,127.0.0.1,postgres,redis,rabbitmq
+      no_proxy: minio,localhost,127.0.0.1,postgres,redis,rabbitmq
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  ota-worker:
+    image: ${OTA_IMAGE_REGISTRY:-ghcr.io/suge2016}/di-ota-worker:${OTA_IMAGE_TAG:-latest}
+    container_name: ota-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NO_PROXY: minio,localhost,127.0.0.1,postgres,redis,rabbitmq
+      no_proxy: minio,localhost,127.0.0.1,postgres,redis,rabbitmq
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  ota-console:
+    image: ${OTA_IMAGE_REGISTRY:-ghcr.io/suge2016}/di-ota-console:${OTA_IMAGE_TAG:-latest}
+    container_name: ota-console
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:15173:80"
+    networks:
+      - default
+      - demogo
+    depends_on:
+      - ota-api
+
+  postgres:
+    image: postgres:16
+    container_name: ota-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ota}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ota}
+      POSTGRES_DB: ${POSTGRES_DB:-ota}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ota} -d ${POSTGRES_DB:-ota}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7
+    container_name: ota-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: ota-rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2025-02-07T23-21-09Z
+    container_name: ota-minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-03-12T17-29-24Z
+    container_name: ota-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin} &&
+      mc mb --ignore-existing local/${S3_BUCKET:-ota-packages} &&
+      mc anonymous set private local/${S3_BUCKET:-ota-packages} &&
+      echo 'minio init done'
+      "
+
+networks:
+  demogo:
+    external: true
+    name: gdw-3d-bin-packing_default
+
+volumes:
+  postgres_data:
+  minio_data:

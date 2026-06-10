@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const apiBase = `${import.meta.env.BASE_URL}api/v1`.replace(/\/{2,}/g, '/');
+
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: apiBase,
   timeout: 15000,
 });
 
@@ -18,7 +20,7 @@ api.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       localStorage.removeItem('jwt_token');
-      window.location.href = '/login';
+      window.location.hash = '#/login';
     }
     return Promise.reject(err);
   }

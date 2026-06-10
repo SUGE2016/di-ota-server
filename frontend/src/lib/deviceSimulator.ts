@@ -68,8 +68,11 @@ async function devicePost<T>(path: string, body: unknown, token: string): Promis
   return parsed;
 }
 
+const deviceApi = (path: string) =>
+  `${import.meta.env.BASE_URL}device/v1${path}`.replace(/\/{2,}/g, '/');
+
 export async function checkUpdate(cfg: DeviceConfig) {
-  return devicePost<CheckUpdateData>('/device/v1/check-update', {
+  return devicePost<CheckUpdateData>(deviceApi('/check-update'), {
     device_id: cfg.deviceId,
     group: cfg.group,
     product_model: cfg.productModel,
@@ -82,7 +85,7 @@ export async function reportStatus(
   cfg: DeviceConfig,
   payload: { taskId: string; status: string; targetVersion: string; sourceVersion?: string },
 ) {
-  return devicePost('/device/v1/report-status', {
+  return devicePost(deviceApi('/report-status'), {
     device_id: cfg.deviceId,
     task_id: payload.taskId,
     status: payload.status,
