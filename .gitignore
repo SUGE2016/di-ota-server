@@ -21,3 +21,6 @@ read-only/
 
 # frontend build cache
 frontend/*.tsbuildinfo
+
+# scripts (md-to-pdf)
+scripts/node_modules/
