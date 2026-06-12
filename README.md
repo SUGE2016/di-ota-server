@@ -15,6 +15,7 @@
    - 按注释填写密钥占位符（`<...>`）
 2. 启动服务：
    - `docker compose up -d`
+   - WSL 宿主机 5432 被占用时：`docker compose -f docker-compose.yml -f docker-compose.local.yml up -d`（Postgres 映射到 5433）
 3. 访问地址：
    - API 健康检查：`http://localhost:8080/healthz`
    - 管理台：`http://localhost:5173`

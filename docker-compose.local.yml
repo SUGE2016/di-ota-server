@@ -1,0 +1,5 @@
+# 本地 WSL 5432 常被占用：postgres 不映射宿主机端口（容器间仍用 postgres:5432）
+services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:5433:5432"
