@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Form, Input, Select, Space, message, Modal, Table, Tag } from 'antd';
+import { Button, Card, Form, Input, Select, Space, message, Modal, Table, Tag, Upload } from 'antd';
+import type { UploadFile } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { Package, packageAPI } from '../api';
@@ -15,6 +16,14 @@ const statusColor: Record<string, string> = {
   Archived: 'default',
 };
 
+async function sha256Hex(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 export function PackagesPage() {
   const [packages, setPackages] = useState<Package[]>([]);
   const [keyword, setKeyword] = useState('');
@@ -23,7 +32,37 @@ export function PackagesPage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [form] = Form.useForm();
   const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileList, setFileList] = useState<UploadFile[]>([]);
+  const [hashing, setHashing] = useState(false);
   const navigate = useNavigate();
+
+  const resetUploadForm = () => {
+    form.resetFields();
+    setSelectedFile(null);
+    setFileList([]);
+    setHashing(false);
+  };
+
+  const handleFileSelect = async (file: File) => {
+    setSelectedFile(file);
+    setFileList([{ uid: '-1', name: file.name, status: 'done' }]);
+    setHashing(true);
+    try {
+      const hash = await sha256Hex(file);
+      form.setFieldsValue({
+        file_hash: hash,
+        signature: `console-upload-${hash.slice(0, 16)}`,
+      });
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : '计算哈希失败');
+      setSelectedFile(null);
+      setFileList([]);
+    } finally {
+      setHashing(false);
+    }
+    return false;
+  };
 
   const load = async () => {
     try {
@@ -37,35 +76,50 @@ export function PackagesPage() {
 
   useEffect(() => { load(); }, []);
 
-  const handleUpload = async (values: any) => {
+  const handleUpload = async (values: {
+    product_code: string;
+    version: string;
+    file_hash?: string;
+    signature?: string;
+  }) => {
     setUploading(true);
     try {
-      const file = values.file?.file;
-      if (!file) { message.error('请选择文件'); return; }
+      const file = selectedFile;
+      if (!file) {
+        message.error('请选择固件文件');
+        return;
+      }
+
+      const fileHash = values.file_hash?.trim() || (await sha256Hex(file));
+      const signature = values.signature?.trim() || `console-upload-${fileHash.slice(0, 16)}`;
 
       const { package_id, upload_url } = await packageAPI.uploadUrl({
         file_name: file.name,
         content_type: file.type || 'application/octet-stream',
+        file_hash: fileHash,
       });
 
-      await fetch(upload_url, {
+      const putRes = await fetch(upload_url, {
         method: 'PUT',
         body: file,
-        headers: { 'Content-Type': 'application/octet-stream' },
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
       });
+      if (!putRes.ok) {
+        throw new Error(`上传 MinIO 失败: HTTP ${putRes.status}`);
+      }
 
       await packageAPI.complete({
         package_id,
         product_code: values.product_code,
         version: values.version,
-        file_hash: values.file_hash || '',
-        signature: values.signature || '',
+        file_hash: fileHash,
+        signature,
         file_size: file.size,
       });
 
       message.success('上传成功');
       setUploadOpen(false);
-      form.resetFields();
+      resetUploadForm();
       load();
     } catch (e: any) {
       message.error(e.message);
@@ -160,25 +214,46 @@ export function PackagesPage() {
           scroll={listTableScroll(columns, filteredPackages.length)}
         />
 
-        <Modal width="min(560px, calc(100vw - 24px))" title="上传固件包" open={uploadOpen} onCancel={() => { setUploadOpen(false); form.resetFields(); }} footer={null}>
+        <Modal
+          width="min(560px, calc(100vw - 24px))"
+          title="上传固件包"
+          open={uploadOpen}
+          onCancel={() => { setUploadOpen(false); resetUploadForm(); }}
+          footer={null}
+        >
           <Form form={form} layout="vertical" onFinish={handleUpload}>
             <Form.Item name="product_code" label="产品代码" rules={[{ required: true }]}>
-              <Input />
+              <Input placeholder="如 AMS" />
             </Form.Item>
             <Form.Item name="version" label="版本号" rules={[{ required: true }]}>
-              <Input />
+              <Input placeholder="如 v2.4.0" />
             </Form.Item>
-            <Form.Item name="file_hash" label="文件哈希">
-              <Input />
+            <Form.Item label="固件文件" required>
+              <Upload
+                fileList={fileList}
+                beforeUpload={(file) => { void handleFileSelect(file); return false; }}
+                onRemove={() => {
+                  setSelectedFile(null);
+                  setFileList([]);
+                  form.setFieldsValue({ file_hash: '', signature: '' });
+                }}
+                maxCount={1}
+              >
+                <Button icon={<UploadOutlined />} loading={hashing}>
+                  {hashing ? '计算 SHA256…' : '选择固件文件'}
+                </Button>
+              </Upload>
             </Form.Item>
-            <Form.Item name="signature" label="签名">
-              <Input.TextArea rows={2} />
+            <Form.Item name="file_hash" label="文件哈希 (SHA256)" extra="选择文件后自动计算">
+              <Input readOnly placeholder="选择文件后自动填充" />
             </Form.Item>
-            <Form.Item name="file" label="固件文件" rules={[{ required: true }]}>
-              <Input type="file" />
+            <Form.Item name="signature" label="签名" extra="默认自动生成；产线真实签名可改">
+              <Input.TextArea rows={2} placeholder="选择文件后自动填充" />
             </Form.Item>
             <Form.Item>
-              <Button type="primary" htmlType="submit" loading={uploading} block>上传</Button>
+              <Button type="primary" htmlType="submit" loading={uploading} disabled={!selectedFile || hashing} block>
+                上传
+              </Button>
             </Form.Item>
           </Form>
         </Modal>
