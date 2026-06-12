@@ -1,4 +1,8 @@
 # demogo.work 专用：127.0.0.1 端口 + Caddy 网络；不启 Keycloak（OIDC 可选）
+#
+# Caddy 需增加 S3 反代（与 /ota/* 并列，勿用 handle_path 以免剥 bucket 前缀）：
+#   handle /ota-packages/* { reverse_proxy ota-minio:9000 }
+# minio 须加入 demogo 网络（见下方 networks），供 Caddy 访问。
 name: ota-server-prod
 
 services:
@@ -94,6 +98,9 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    networks:
+      - default
+      - demogo
     volumes:
       - minio_data:/data
     healthcheck:
