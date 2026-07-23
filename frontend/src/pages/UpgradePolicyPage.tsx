@@ -89,7 +89,7 @@ export function UpgradePolicyPage() {
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="升级状态机策略（按 product_model）"
+        message="升级策略（按 product_model）"
         description={
           <span>
             默认模式：<Tag color="blue">{defaultMode === 'strict' ? '严格' : '宽松'}</Tag>

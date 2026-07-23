@@ -26,7 +26,7 @@ const allMenuItems = [
   { key: '/alerts', icon: <AlertOutlined />, label: '告警中心' },
   { key: '/packages', icon: <BoxPlotOutlined />, label: '固件包' },
   { key: '/tasks', icon: <ThunderboltOutlined />, label: '发布任务' },
-  { key: '/upgrade-policy', icon: <ControlOutlined />, label: '升级状态机策略' },
+  { key: '/upgrade-policy', icon: <ControlOutlined />, label: '升级策略' },
 ];
 
 export function MainLayout() {

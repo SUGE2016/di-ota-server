@@ -30,7 +30,7 @@ const LIST_META: Record<string, PageMeta> = {
     subtitle: '配置灰度策略与执行窗口，实时控制任务流转。',
   },
   '/upgrade-policy': {
-    title: '升级状态机策略',
+    title: '升级策略',
     subtitle: '按产品型号配置 report-status 宽松/严格模式（默认宽松）。',
   },
 };
