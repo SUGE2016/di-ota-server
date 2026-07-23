@@ -54,7 +54,7 @@ func TestCanTransitUpgradeStatus_Backward(t *testing.T) {
 
 func TestCanTransitUpgradeStatus_TerminalSuccess(t *testing.T) {
 	if canTransitUpgradeStatus("Success", "Failed") {
-		t.Fatal("Success is terminal")
+		t.Fatal("Success is terminal under strict canTransit")
 	}
 }
 
@@ -76,5 +76,35 @@ func TestCanTransitUpgradeStatus_Rollbacking(t *testing.T) {
 	}
 	if canTransitUpgradeStatus("Rollbacking", "Downloading") {
 		t.Fatal("Rollbacking -> Downloading should be rejected")
+	}
+}
+
+func TestDecideUpgradeStatusAction_RelaxedResetAndFailedToSuccess(t *testing.T) {
+	if decideUpgradeStatusAction("Upgrading", "Pending", "relaxed") != upgradeStatusAllow {
+		t.Fatal("relaxed should allow reset")
+	}
+	if decideUpgradeStatusAction("Failed", "Success", "relaxed") != upgradeStatusAllow {
+		t.Fatal("relaxed should allow Failed -> Success")
+	}
+}
+
+func TestDecideUpgradeStatusAction_StrictRejectsReset(t *testing.T) {
+	if decideUpgradeStatusAction("Upgrading", "Pending", "strict") != upgradeStatusReject {
+		t.Fatal("strict should reject reset")
+	}
+	if decideUpgradeStatusAction("Failed", "Success", "strict") != upgradeStatusReject {
+		t.Fatal("strict should reject Failed -> Success")
+	}
+}
+
+func TestDecideUpgradeStatusAction_SuccessThenIntermediateIgnored(t *testing.T) {
+	if decideUpgradeStatusAction("Success", "Downloading", "relaxed") != upgradeStatusIgnore {
+		t.Fatal("Success -> Downloading should be ignored")
+	}
+	if decideUpgradeStatusAction("Success", "Downloading", "strict") != upgradeStatusIgnore {
+		t.Fatal("Success -> Downloading should be ignored in strict too")
+	}
+	if decideUpgradeStatusAction("Success", "Success", "relaxed") != upgradeStatusAllow {
+		t.Fatal("Success -> Success should allow")
 	}
 }

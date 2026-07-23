@@ -1,11 +1,11 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Avatar, Button, Typography, Space, Tag } from 'antd';
-import { DashboardOutlined, BoxPlotOutlined, ThunderboltOutlined, LogoutOutlined, UserOutlined, TeamOutlined, LaptopOutlined, AlertOutlined, KeyOutlined } from '@ant-design/icons';
+import { DashboardOutlined, BoxPlotOutlined, ThunderboltOutlined, LogoutOutlined, UserOutlined, TeamOutlined, LaptopOutlined, AlertOutlined, KeyOutlined, ControlOutlined } from '@ant-design/icons';
 import useAuthStore from '../stores/authStore';
 import { APP_VERSION_LABEL, COPYRIGHT_HOLDER } from '../constants/version';
 import { menuKeyForPath, pageMetaForPath } from '../constants/pageMeta';
 import { OtaLogo } from './OtaLogo';
-import { canManageDeviceSecrets } from '../utils/roles';
+import { canManageDeviceSecrets, canManageUpgradePolicy } from '../utils/roles';
 
 const { Sider, Header, Content } = Layout;
 const { Text } = Typography;
@@ -26,6 +26,7 @@ const allMenuItems = [
   { key: '/alerts', icon: <AlertOutlined />, label: '告警中心' },
   { key: '/packages', icon: <BoxPlotOutlined />, label: '固件包' },
   { key: '/tasks', icon: <ThunderboltOutlined />, label: '发布任务' },
+  { key: '/upgrade-policy', icon: <ControlOutlined />, label: '升级状态机策略' },
 ];
 
 export function MainLayout() {
@@ -38,9 +39,11 @@ export function MainLayout() {
 
   const { title: pageTitle, subtitle: pageSubtitle } = pageMetaForPath(location.pathname);
   const activeMenuKey = menuKeyForPath(location.pathname);
-  const menuItems = allMenuItems.filter((item) =>
-    item.key === '/device-secrets' ? canManageDeviceSecrets(roles) : true,
-  );
+  const menuItems = allMenuItems.filter((item) => {
+    if (item.key === '/device-secrets') return canManageDeviceSecrets(roles);
+    if (item.key === '/upgrade-policy') return canManageUpgradePolicy(roles);
+    return true;
+  });
 
   const handleLogout = () => {
     logout();

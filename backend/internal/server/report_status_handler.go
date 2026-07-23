@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -69,14 +71,49 @@ func handleReportStatusRequest(c *gin.Context, cfg *config.Config, q *store.Quer
 		}
 	}
 
+	mode := resolveReportStatusMode(c.Request.Context(), q, req.DeviceID)
+
 	prevStatus, err := q.GetUpgradeRecordStatus(c.Request.Context(), req.DeviceID, req.TaskID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 5000, "message": "query previous status failed"})
 		return
 	}
-	if !canTransitUpgradeStatus(prevStatus.String, normalizedStatus) {
-		c.JSON(http.StatusConflict, gin.H{"code": 2005, "message": "invalid status transition", "data": gin.H{"previous": prevStatus.String, "current": normalizedStatus}})
+	prev := prevStatus.String
+
+	action := decideUpgradeStatusAction(prev, normalizedStatus, mode)
+	switch action {
+	case upgradeStatusReject:
+		c.JSON(http.StatusConflict, gin.H{
+			"code":    2005,
+			"message": "invalid status transition",
+			"data": gin.H{
+				"previous": prev,
+				"current":  normalizedStatus,
+				"mode":     mode,
+			},
+		})
 		return
+	case upgradeStatusIgnore:
+		c.JSON(http.StatusOK, gin.H{
+			"code":    0,
+			"message": "Status ignored",
+			"data": gin.H{
+				"idempotency_key": idemKey,
+				"status":          prev,
+				"ignored":         true,
+				"reported":        normalizedStatus,
+				"mode":            mode,
+				"reason":          "terminal_success",
+			},
+		})
+		return
+	}
+
+	if normalizedStatus == "Success" {
+		if err := validateSuccessReport(c.Request.Context(), q, req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 1002, "message": err.Error()})
+			return
+		}
 	}
 
 	if _, err := q.UpsertUpgradeRecord(c.Request.Context(), store.UpsertUpgradeRecordParams{
@@ -106,6 +143,7 @@ func handleReportStatusRequest(c *gin.Context, cfg *config.Config, q *store.Quer
 		"source_version":  strings.TrimSpace(req.SourceVersion),
 		"target_version":  strings.TrimSpace(req.TargetVersion),
 		"error_code":      strings.TrimSpace(req.ErrorCode),
+		"mode":            mode,
 	}
 	if msg := strings.TrimSpace(req.ErrorMessage); msg != "" {
 		respData["error_message"] = msg
@@ -125,4 +163,44 @@ func handleReportStatusRequest(c *gin.Context, cfg *config.Config, q *store.Quer
 		return
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+func resolveReportStatusMode(ctx context.Context, q *store.Queries, deviceID string) string {
+	dev, err := q.GetDeviceRegistry(ctx, deviceID)
+	if err != nil {
+		return store.ReportStatusModeRelaxed
+	}
+	mode, err := q.GetReportStatusMode(ctx, dev.ProductModel)
+	if err != nil {
+		return store.ReportStatusModeRelaxed
+	}
+	return mode
+}
+
+func validateSuccessReport(ctx context.Context, q *store.Queries, req reportStatusRequest) error {
+	target := strings.TrimSpace(req.TargetVersion)
+	if target == "" {
+		return fmt.Errorf("target_version is required for Success")
+	}
+	task, err := q.GetReleaseTaskExt(ctx, req.TaskID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("task_id not found")
+		}
+		return fmt.Errorf("query task failed")
+	}
+	pkg, err := q.GetPackageDetail(ctx, task.PackageID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("package for task not found")
+		}
+		return fmt.Errorf("query package failed")
+	}
+	if strings.TrimSpace(pkg.Version) == "" {
+		return fmt.Errorf("package version empty")
+	}
+	if CompareVersion(target, pkg.Version) != 0 {
+		return fmt.Errorf("target_version does not match task package version")
+	}
+	return nil
 }

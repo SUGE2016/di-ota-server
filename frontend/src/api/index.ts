@@ -285,6 +285,27 @@ export const alertAPI = {
     wrap<{ updated: number }>(api.post('/alerts/actions', { action, alert_ids: alertIds })),
 };
 
+export interface ProductModelPolicy {
+  product_model: string;
+  report_status_mode: 'relaxed' | 'strict' | string;
+  updated_at?: string | null;
+  updated_by?: string;
+  explicit?: boolean;
+}
+
+export const productModelPolicyAPI = {
+  list: () =>
+    wrap<{ default_mode: string; policies: ProductModelPolicy[] }>(
+      api.get('/product-model-policies')
+    ),
+  update: (productModel: string, reportStatusMode: string) =>
+    wrap<ProductModelPolicy>(
+      api.put(`/product-model-policies/${encodeURIComponent(productModel)}`, {
+        report_status_mode: reportStatusMode,
+      })
+    ),
+};
+
 export const dashboardAPI = {
   overview: () => {
     return Promise.all([

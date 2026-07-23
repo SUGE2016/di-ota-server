@@ -298,19 +298,22 @@ pending → downloading → downloaded → verifying → upgrading → success
 |--------|------|
 | `failed` | 任意阶段可上报；之后可 `rollbacking` → `rolledback` |
 
-**状态机规则（设备需遵守）：**
+**状态机规则：**
 
 - 允许 **相同状态重复上报**（幂等）
-- **不允许**从后阶段倒退回前阶段（如 Upgrading → Downloading），否则 HTTP 409
-- `Success` / `RolledBack` 为 **终态**，不可再变更
+- **`Success` 后**再报中间态：服务端 **忽略**（HTTP 200，`ignored=true`），仅再报 Success 幂等
+- 上报 **`Success`** 时：`target_version` **必填**，且须与该 `task_id` 对应固件包版本一致
+- 按 **product_model** 可配置宽松/严格（管理台「升级状态机策略」；**默认宽松**）
+  - **宽松**：允许回退重置、跳步、`Failed → Success`
+  - **严格**：不允许回退；`Failed` 后不可直接 Success（保持原规则，非法迁移 HTTP 409）
 
 ### 6.4 错误响应
 
 | HTTP | code | 含义 |
 |------|------|------|
-| 400 | 1002 | 缺字段或非法 status |
+| 400 | 1002 | 缺字段、非法 status，或 Success 校验失败（无 target_version / 与任务包版本不符） |
 | 401 | 1001 | 签名错误、时间戳过期、或 header/body 的 device_id 不一致 |
-| 409 | 2005 | 非法状态迁移（见上） |
+| 409 | 2005 | 严格模式下非法状态迁移 |
 
 ---
 

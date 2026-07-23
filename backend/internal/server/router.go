@@ -1201,6 +1201,7 @@ func NewRouter(cfg *config.Config, q *store.Queries) *gin.Engine {
 		})
 
 		registerAlertRoutes(api, q)
+		registerProductModelPolicyRoutes(api, cfg, q)
 		registerIntegrationRoutes(api, cfg, q)
 	}
 
@@ -1817,46 +1818,6 @@ func normalizeUpgradeStatus(raw string) (string, bool) {
 	}
 	n, ok := m[v]
 	return n, ok
-}
-
-func canTransitUpgradeStatus(prev, next string) bool {
-	if next == "" {
-		return false
-	}
-	if strings.TrimSpace(prev) == "" {
-		return true
-	}
-	if prev == next {
-		return true
-	}
-
-	if prev == "Success" || prev == "RolledBack" || prev == "RollbackFailed" {
-		return false
-	}
-	if next == "Failed" {
-		return true
-	}
-	if prev == "Failed" {
-		return next == "Rollbacking" || next == "RolledBack" || next == "RollbackFailed"
-	}
-	if prev == "Rollbacking" {
-		return next == "RolledBack" || next == "RollbackFailed"
-	}
-
-	order := map[string]int{
-		"Pending":     0,
-		"Downloading": 1,
-		"Downloaded":  2,
-		"Verifying":   3,
-		"Upgrading":   4,
-		"Success":     5,
-	}
-	p, okP := order[prev]
-	n, okN := order[next]
-	if !okP || !okN {
-		return false
-	}
-	return n >= p
 }
 
 func inCanaryRange(deviceID, taskID string, canaryPercent int32) bool {

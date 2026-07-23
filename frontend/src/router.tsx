@@ -12,9 +12,10 @@ import { AlertsPage } from './pages/AlertsPage';
 import { UserDetailPage } from './pages/UserDetailPage';
 import { DeviceDetailPage } from './pages/DeviceDetailPage';
 import { DeviceSecretsPage } from './pages/DeviceSecretsPage';
+import { UpgradePolicyPage } from './pages/UpgradePolicyPage';
 import { DeviceSimulatorPage } from './pages/DeviceSimulatorPage';
 import useAuthStore from './stores/authStore';
-import { canManageDeviceSecrets } from './utils/roles';
+import { canManageDeviceSecrets, canManageUpgradePolicy } from './utils/roles';
 
 function PrivateRoute() {
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
@@ -27,6 +28,14 @@ function PrivateRoute() {
 function SecretAdminRoute() {
   const roles = useAuthStore((s) => s.roles);
   if (!canManageDeviceSecrets(roles)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <Outlet />;
+}
+
+function AdminRoute() {
+  const roles = useAuthStore((s) => s.roles);
+  if (!canManageUpgradePolicy(roles)) {
     return <Navigate to="/dashboard" replace />;
   }
   return <Outlet />;
@@ -47,6 +56,9 @@ export const router = createHashRouter([
         { path: '/devices/:id', element: <DeviceDetailPage /> },
         { element: <SecretAdminRoute />, children: [
           { path: '/device-secrets', element: <DeviceSecretsPage /> },
+        ]},
+        { element: <AdminRoute />, children: [
+          { path: '/upgrade-policy', element: <UpgradePolicyPage /> },
         ]},
         { path: '/alerts', element: <AlertsPage /> },
         { path: '/packages', element: <PackagesPage /> },

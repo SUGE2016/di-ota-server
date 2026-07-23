@@ -29,6 +29,10 @@ const LIST_META: Record<string, PageMeta> = {
     title: '发布任务',
     subtitle: '配置灰度策略与执行窗口，实时控制任务流转。',
   },
+  '/upgrade-policy': {
+    title: '升级状态机策略',
+    subtitle: '按产品型号配置 report-status 宽松/严格模式（默认宽松）。',
+  },
 };
 
 const DETAIL_META: Record<string, PageMeta> = {
@@ -57,6 +61,7 @@ export function menuKeyForPath(pathname: string): string {
   if (pathname.startsWith('/packages')) return '/packages';
   if (pathname.startsWith('/tasks')) return '/tasks';
   if (pathname.startsWith('/alerts')) return '/alerts';
+  if (pathname.startsWith('/upgrade-policy')) return '/upgrade-policy';
   return pathname === '/' ? '/dashboard' : pathname;
 }
 
